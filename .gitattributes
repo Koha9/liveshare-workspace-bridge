@@ -1,0 +1,12 @@
+* text=auto
+*.cjs text eol=lf
+*.json text eol=lf
+LICENSE text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.ps1 text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.code-workspace text eol=lf
+*.vsix binary
+*.zip binary

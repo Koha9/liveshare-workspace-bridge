@@ -1,0 +1,4 @@
+interface:
+  display_name: "Live Share Workspace Bridge"
+  short_description: "Edit Live Share files through a local Windows bridge"
+  default_prompt: "Use $liveshare-workspace-bridge to work in the connected Live Share workspace, reuse document versions, and check target-file save results."

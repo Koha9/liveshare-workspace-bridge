@@ -1,0 +1,24 @@
+# Reproducible build output and local acceptance receipts.
+/dist/
+/.local/
+
+# Dependencies and caches.
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Local configuration and credentials.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.local.json
+*.log
+
+# Operating-system files.
+Thumbs.db
+desktop.ini
+.DS_Store
+AGENTS.md

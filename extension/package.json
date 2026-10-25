@@ -1,0 +1,30 @@
+{
+  "name": "liveshare-workspace-tools",
+  "displayName": "Live Share Workspace Tools",
+  "description": "Read, edit and save Live Share workspaces through current-user Windows IPC, without ports or tokens.",
+  "version": "0.1.1",
+  "publisher": "Koha9-Lee",
+  "license": "MIT",
+  "engines": { "vscode": "^1.100.0" },
+  "main": "./extension.cjs",
+  "icon": "assets/icon.png",
+  "extensionKind": ["ui"],
+  "activationEvents": ["*"],
+  "capabilities": { "virtualWorkspaces": true, "untrustedWorkspaces": { "supported": true } },
+  "scripts": { "test": "node --test test/*.test.cjs", "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs" },
+  "contributes": {
+    "commands": [
+      { "command": "liveshareWorkspace.restart", "title": "Live Share Workspace Tools: Restart Connection" },
+      { "command": "liveshareWorkspace.stop", "title": "Live Share Workspace Tools: Stop Connection" }
+    ],
+    "configuration": {
+      "title": "Live Share Workspace Tools",
+      "properties": {
+        "liveshareWorkspace.powershell": {
+          "type": "string", "default": "",
+          "scope": "machine", "description": "Optional PowerShell executable override. Defaults to built-in Windows PowerShell; pipe access is restricted to the current Windows user."
+        }
+      }
+    }
+  }
+}
