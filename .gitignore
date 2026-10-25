@@ -16,6 +16,7 @@ __pycache__/
 !.env.*.example
 *.local.json
 *.log
+/agent-workspace/
 
 # Operating-system files.
 Thumbs.db
