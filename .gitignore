@@ -22,3 +22,7 @@ Thumbs.db
 desktop.ini
 .DS_Store
 AGENTS.md
+
+# vscode
+.vscode/
+*.code-workspace
