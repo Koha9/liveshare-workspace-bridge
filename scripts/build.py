@@ -5,7 +5,9 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import posixpath
 import re
+from urllib.parse import urlsplit
 import zipfile
 from xml.sax.saxutils import escape
 
@@ -15,6 +17,8 @@ SKILL_NAME = "liveshare-workspace-bridge"
 SKILL = ROOT / "skills" / SKILL_NAME
 DIST = ROOT / "dist"
 RUNTIME_FILES = ("extension.cjs", "workspace.cjs", "core.cjs", "cli.cjs", "pipe-host.ps1")
+DOCUMENT_NAMES = ("README", "USAGE", "API", "ARCHITECTURE", "DEVELOPMENT", "TROUBLESHOOTING")
+LOCALES = ("", ".zh-CN", ".zh-TW", ".ja")
 SKILL_FILES = (
     "SKILL.md", "agents/openai.yaml", "references/api.md",
     "scripts/liveshare.cjs",
@@ -28,6 +32,8 @@ def read_json(path: Path) -> dict:
 def check_sources() -> dict:
     package = read_json(EXTENSION / "package.json")
     root_package = read_json(ROOT / "package.json")
+    if root_package["name"] != SKILL_NAME or package["name"] != SKILL_NAME:
+        raise ValueError("Root, extension and skill must all be named liveshare-workspace-bridge.")
     if root_package["version"] != package["version"]:
         raise ValueError("Root and extension package versions differ.")
     if root_package["license"] != package["license"]:
@@ -56,15 +62,47 @@ def check_sources() -> dict:
     return package
 
 
+def marketplace_markdown(text: str, source: str, repository: str) -> str:
+    """Resolve repository-relative reader links for the Marketplace renderer."""
+    def replace(match: re.Match) -> str:
+        target = match.group(2)
+        if urlsplit(target).scheme or target.startswith(("#", "/")):
+            return match.group(0)
+        relative = posixpath.normpath(posixpath.join(posixpath.dirname(source), target))
+        return f"{match.group(1)}{repository}/blob/main/{relative}{match.group(3)}"
+    return re.sub(r"(\]\()([^\s)]+)(\))", replace, text)
+
+
 def package_members(package: dict) -> dict[str, dict[str, bytes]]:
     identity = {key: escape(package[key], {'"': "&quot;"}) for key in ("name", "version", "publisher")}
+    repository = package["repository"]["url"].removesuffix(".git")
+    properties = {
+        "Microsoft.VisualStudio.Code.Engine": package["engines"]["vscode"],
+        "Microsoft.VisualStudio.Code.ExtensionKind": ",".join(package["extensionKind"]),
+        "Microsoft.VisualStudio.Code.ExecutesCode": "true",
+        "Microsoft.VisualStudio.Services.Links.Source": repository,
+        "Microsoft.VisualStudio.Services.Links.GitHub": repository,
+        "Microsoft.VisualStudio.Services.Links.Support": package["bugs"]["url"],
+        "Microsoft.VisualStudio.Services.Links.Learn": package["homepage"],
+        "Microsoft.VisualStudio.Services.GitHubFlavoredMarkdown": "true",
+        "Microsoft.VisualStudio.Services.Content.Pricing": "Free",
+    }
+    property_xml = "".join(f'<Property Id="{key}" Value="{escape(value, {chr(34): "&quot;"})}"/>' for key, value in properties.items())
+    assets = {
+        "Microsoft.VisualStudio.Code.Manifest": "extension/package.json",
+        "Microsoft.VisualStudio.Services.Content.Details": "extension/README.md",
+        "Microsoft.VisualStudio.Services.Content.License": "extension/LICENSE.txt",
+        "Microsoft.VisualStudio.Services.Icons.Default": f"extension/{package['icon']}",
+    }
+    asset_xml = "".join(f'<Asset Type="{key}" Path="{value}" Addressable="true"/>' for key, value in assets.items())
     manifest = f'''<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">
  <Metadata><Identity Language="en-US" Id="{identity['name']}" Version="{identity['version']}" Publisher="{identity['publisher']}"/>
  <DisplayName>{escape(package['displayName'])}</DisplayName><Description xml:space="preserve">{escape(package['description'])}</Description>
- <Categories>Other</Categories><Properties><Property Id="Microsoft.VisualStudio.Code.Engine" Value="{escape(package['engines']['vscode'])}"/></Properties></Metadata>
+ <Tags>{escape(','.join(package['keywords']))}</Tags><Categories>{escape(','.join(package['categories']))}</Categories><GalleryFlags>Public</GalleryFlags>
+ <Properties>{property_xml}</Properties><License>extension/LICENSE.txt</License><Icon>extension/{package['icon']}</Icon></Metadata>
  <Installation><InstallationTarget Id="Microsoft.VisualStudio.Code"/></Installation><Dependencies/>
- <Assets><Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true"/></Assets>
+ <Assets>{asset_xml}</Assets>
 </PackageManifest>'''
     content_types = '''<?xml version="1.0" encoding="utf-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -82,12 +120,16 @@ def package_members(package: dict) -> dict[str, dict[str, bytes]]:
             raise ValueError("Icon must be an existing file inside extension/.")
         extension_members[f"extension/{Path(icon_name).as_posix()}"] = icon_path.read_bytes()
     # Ship language navigation and reader documentation without repository-relative links.
-    for suffix in ("", ".zh-CN", ".zh-TW", ".ja"):
+    for suffix in LOCALES:
         name = f"README{suffix}.md"
-        readme = (EXTENSION / name).read_text(encoding="utf-8").replace("../docs/", "docs/").replace("../LICENSE", "LICENSE.txt")
+        readme = marketplace_markdown((EXTENSION / name).read_text(encoding="utf-8"), f"extension/{name}", repository)
         extension_members[f"extension/{name}"] = readme.encode("utf-8")
-    for document in sorted((ROOT / "docs").glob("*.md")):
-        extension_members[f"extension/docs/{document.name}"] = document.read_bytes()
+    # Publish reader documentation only; investigations and local evidence are not release assets.
+    for stem in DOCUMENT_NAMES:
+        for suffix in LOCALES:
+            name = f"{stem}{suffix}.md"
+            document = ROOT / "docs" / name
+            extension_members[f"extension/docs/{name}"] = marketplace_markdown(document.read_text(encoding="utf-8"), f"docs/{name}", repository).encode("utf-8")
     extension_members.update({
         "extension.vsixmanifest": manifest.encode("utf-8"),
         "[Content_Types].xml": content_types.encode("utf-8"),

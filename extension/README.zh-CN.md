@@ -1,4 +1,4 @@
-# Live Share Workspace Tools
+# Live Share Workspace Bridge
 
 [English](README.md) | **简体中文** | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
@@ -12,8 +12,8 @@
 
 命令：
 
-- `Live Share Workspace Tools: Restart Connection`
-- `Live Share Workspace Tools: Stop Connection`
+- `Live Share Workspace Bridge: Restart Connection`
+- `Live Share Workspace Bridge: Stop Connection`
 
 详见[使用指南](../docs/USAGE.zh-CN.md)、[API 参考](../docs/API.zh-CN.md)和[故障排查](../docs/TROUBLESHOOTING.zh-CN.md)。
 

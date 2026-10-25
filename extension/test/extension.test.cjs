@@ -6,14 +6,15 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { records, request } = require('../cli.cjs');
+const manifest = require('../package.json');
 test('extension starts before joining, refreshes workspace epoch, restarts and removes registration on disposal', { skip: process.platform !== 'win32', timeout: 15000 }, async t => {
   const commands = new Map(), context = { subscriptions: [] };
   let changeFolders;
   class Uri { constructor(value) { this.value = value; this.scheme = 'vsls'; this.authority = ''; this.path = '/'; } toString() { return this.value; } }
   const vscode = {
     Uri,
-    window: { createOutputChannel: () => ({ append() {}, appendLine() {}, dispose() {} }) },
-    workspace: { workspaceFolders: [], textDocuments: [], isTrusted: true, getConfiguration: () => ({ get: () => '' }), onDidChangeWorkspaceFolders: callback => { changeFolders = callback; return { dispose() {} }; } },
+    window: { createOutputChannel: name => { assert.equal(name, manifest.displayName); return { append() {}, appendLine() {}, dispose() {} }; } },
+    workspace: { workspaceFolders: [], textDocuments: [], isTrusted: true, getConfiguration: section => ({ get: key => { assert.ok(Object.hasOwn(manifest.contributes.configuration.properties, `${section}.${key}`)); assert.equal(section, 'liveshareWorkspaceBridge'); return ''; } }), onDidChangeWorkspaceFolders: callback => { changeFolders = callback; return { dispose() {} }; } },
     commands: { registerCommand: (name, callback) => { assert.equal(commands.has(name), false); commands.set(name, callback); return { dispose() { commands.delete(name); } }; } }
   };
   const loader = Module._load;
@@ -22,6 +23,7 @@ test('extension starts before joining, refreshes workspace epoch, restarts and r
   finally { Module._load = loader; }
   t.after(() => { for (const disposable of context.subscriptions.slice().reverse()) disposable.dispose(); });
   extension.activate(context);
+  assert.deepEqual([...commands.keys()].sort(), manifest.contributes.commands.map(x => x.command).sort());
   async function ownRecord(except) {
     const deadline = Date.now() + 5000;
     while (Date.now() < deadline) {
@@ -38,9 +40,9 @@ test('extension starts before joining, refreshes workspace epoch, restarts and r
   assert.equal(updated.epoch, 2); assert.equal(updated.roots[0].name, 'Lifecycle fixture');
   const response = await request(updated, { op: 'info', instance: updated.id });
   assert.equal(response.result.epoch, 2); assert.equal(response.result.roots[0].uri, 'vsls:/');
-  commands.get('liveshareWorkspace.stop')();
+  commands.get('liveshareWorkspaceBridge.stop')();
   assert.equal(records().some(x => x.id === first.id), false);
-  commands.get('liveshareWorkspace.restart')();
+  commands.get('liveshareWorkspaceBridge.restart')();
   const restarted = await ownRecord(first.id);
   assert.equal(restarted.epoch, 3);
   for (const disposable of context.subscriptions.slice().reverse()) disposable.dispose();

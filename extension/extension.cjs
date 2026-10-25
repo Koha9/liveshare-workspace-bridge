@@ -13,7 +13,7 @@ const registry = path.join(os.homedir(), '.liveshare-local', 'instances');
 
 function activate(context) {
   if (process.platform !== 'win32') return;
-  const output = vscode.window.createOutputChannel('Live Share Workspace Tools');
+  const output = vscode.window.createOutputChannel('Live Share Workspace Bridge');
   let child = null, ready = false, disposed = false, epoch = 1, id, discovery;
   const unregister = () => { if (discovery) { try { fs.unlinkSync(discovery); } catch {} } };
   let api;
@@ -33,7 +33,7 @@ function activate(context) {
     if (disposed || child) return;
     id = crypto.randomUUID(); discovery = path.join(registry, `${id}.json`);
     api = createWorkspaceApi(vscode, { id, version, epoch: () => epoch });
-    const powershell = vscode.workspace.getConfiguration('liveshareWorkspace').get('powershell', '') || path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const powershell = vscode.workspace.getConfiguration('liveshareWorkspaceBridge').get('powershell', '') || path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
     const current = spawn(powershell, ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', path.join(__dirname, 'pipe-host.ps1'), '-PipeName', `liveshare-local-${process.pid}-${id}`, '-ParentProcessId', String(process.pid)], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     child = current;
     const currentApi = api;
@@ -59,8 +59,8 @@ function activate(context) {
   }
   context.subscriptions.push(output);
   context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => { epoch++; publish(); }));
-  context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspace.restart', () => { stop(); epoch++; start(); }));
-  context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspace.stop', () => { stop(); output.appendLine('Stopped by command.'); }));
+  context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspaceBridge.restart', () => { stop(); epoch++; start(); }));
+  context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspaceBridge.stop', () => { stop(); output.appendLine('Stopped by command.'); }));
   context.subscriptions.push({ dispose() { disposed = true; stop(); } });
   start(); // Also supports joining Live Share after this extension has activated.
 }

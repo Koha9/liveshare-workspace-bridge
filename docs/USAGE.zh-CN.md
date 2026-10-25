@@ -56,6 +56,6 @@ CLI 也接受从 stdin 输入的 JSON 对象。请从可用的本机目录启动
 
 ## 管理连接
 
-服务随 VS Code 窗口运行。需要时，可在命令面板执行 `Live Share Workspace Tools: Restart Connection` 或 `Live Share Workspace Tools: Stop Connection`。
+服务随 VS Code 窗口运行。需要时，可在命令面板执行 `Live Share Workspace Bridge: Restart Connection` 或 `Live Share Workspace Bridge: Stop Connection`。
 
 新窗口或重载会改变实例 ID，工作区变化会更新 epoch。出现 `instance_mismatch`、`workspace_changed` 或实例不可用错误时，重新发现并核对项目。

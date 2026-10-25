@@ -56,6 +56,6 @@ CLI は stdin からの JSON オブジェクトも受け付けます。利用可
 
 ## 接続の管理
 
-サービスは VS Code ウィンドウのライフサイクルに従います。必要に応じてコマンドパレットから `Live Share Workspace Tools: Restart Connection` または `Live Share Workspace Tools: Stop Connection` を実行してください。
+サービスは VS Code ウィンドウのライフサイクルに従います。必要に応じてコマンドパレットから `Live Share Workspace Bridge: Restart Connection` または `Live Share Workspace Bridge: Stop Connection` を実行してください。
 
 新しいウィンドウや再読み込みではインスタンス ID が変わり、ワークスペースの変更では epoch が更新されます。`instance_mismatch`、`workspace_changed`、インスタンス利用不可のエラーが出た場合は、再検出してプロジェクトを確認してください。

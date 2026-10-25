@@ -56,6 +56,6 @@ Use `symbols`, `workspaceSymbols`, and `definition` for language-aware navigatio
 
 ## Manage the connection
 
-The service follows the VS Code window lifecycle. Use `Live Share Workspace Tools: Restart Connection` or `Live Share Workspace Tools: Stop Connection` from the Command Palette when needed.
+The service follows the VS Code window lifecycle. Use `Live Share Workspace Bridge: Restart Connection` or `Live Share Workspace Bridge: Stop Connection` from the Command Palette when needed.
 
 A new window or a reload changes the instance ID. Workspace changes update the epoch. Rediscover and confirm the project after an `instance_mismatch`, `workspace_changed`, or unavailable-instance error.

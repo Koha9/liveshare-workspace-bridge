@@ -1,9 +1,9 @@
 {
-  "name": "liveshare-workspace",
+  "name": "liveshare-workspace-bridge",
   "version": "0.1.1",
   "private": true,
   "license": "MIT",
-  "description": "Live Share Workspace Tools VS Code extension and its Codex skill, maintained together.",
+  "description": "Live Share Workspace Bridge VS Code extension and its Codex skill, maintained together.",
   "scripts": {
     "test": "npm --prefix extension test",
     "check": "npm --prefix extension run check && node --check skills/liveshare-workspace-bridge/scripts/liveshare.cjs"

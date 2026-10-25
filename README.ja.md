@@ -31,7 +31,7 @@ Windows 上のローカルブリッジを通じて、Codex から VS Code Live S
 $pythonExe = '<path-to-python.exe>'
 & $pythonExe .\scripts\build.py
 
-$vsix = Get-ChildItem .\dist\liveshare-workspace-tools-*.vsix |
+$vsix = Get-ChildItem .\dist\liveshare-workspace-bridge-*.vsix |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 code --install-extension $vsix.FullName
 ```

@@ -1,4 +1,4 @@
-# Live Share Workspace Tools
+# Live Share Workspace Bridge
 
 **English** | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
@@ -12,8 +12,8 @@ Install in the Profile used by the Guest window. Follow VS Code's reload prompt 
 
 Commands:
 
-- `Live Share Workspace Tools: Restart Connection`
-- `Live Share Workspace Tools: Stop Connection`
+- `Live Share Workspace Bridge: Restart Connection`
+- `Live Share Workspace Bridge: Stop Connection`
 
 See the [usage guide](../docs/USAGE.md), [API reference](../docs/API.md), and [troubleshooting guide](../docs/TROUBLESHOOTING.md).
 

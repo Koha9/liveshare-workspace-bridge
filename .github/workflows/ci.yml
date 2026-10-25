@@ -26,6 +26,9 @@ jobs:
       - name: Validate source layout and synchronized skill client
         shell: pwsh
         run: '& "${{ steps.python.outputs.python-path }}" scripts/build.py --check'
+      - name: Validate Marketplace assets and reader links
+        shell: pwsh
+        run: '& "${{ steps.python.outputs.python-path }}" scripts/test_build.py'
       - name: Build packages
         shell: pwsh
         run: '& "${{ steps.python.outputs.python-path }}" scripts/build.py'

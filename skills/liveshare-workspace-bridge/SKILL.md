@@ -1,13 +1,13 @@
 ---
 name: liveshare-workspace-bridge
-description: "Read, edit, and save files in a Windows VS Code Live Share Guest workspace through Live Share Workspace Tools. Use for shared-project tasks involving vsls: URIs, multi-file edits, file operations, or native editor search."
+description: "Read, edit, and save files in a Windows VS Code Live Share Guest workspace through Live Share Workspace Bridge. Use for shared-project tasks involving vsls: URIs, multi-file edits, file operations, or native editor search."
 metadata:
   version: "0.1.1"
 ---
 
 # Live Share Workspace Bridge
 
-Requires Windows, Node.js, and Live Share Workspace Tools in the connected VS Code Guest window. Operate the shared project through the bundled `scripts/liveshare.cjs` client, which uses a current-user Windows named pipe; no HTTP endpoint, MCP configuration, or access token is needed.
+Requires Windows, Node.js, and Live Share Workspace Bridge in the connected VS Code Guest window. Operate the shared project through the bundled `scripts/liveshare.cjs` client, which uses a current-user Windows named pipe; no HTTP endpoint, MCP configuration, or access token is needed.
 
 ## Select the workspace once
 

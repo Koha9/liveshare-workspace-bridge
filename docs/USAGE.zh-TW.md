@@ -56,6 +56,6 @@ CLI 也接受從 stdin 輸入的 JSON 物件。請從可用的本機目錄啟動
 
 ## 管理連線
 
-服務隨 VS Code 視窗執行。需要時，可在命令選擇區執行 `Live Share Workspace Tools: Restart Connection` 或 `Live Share Workspace Tools: Stop Connection`。
+服務隨 VS Code 視窗執行。需要時，可在命令選擇區執行 `Live Share Workspace Bridge: Restart Connection` 或 `Live Share Workspace Bridge: Stop Connection`。
 
 新視窗或重新載入會改變執行個體 ID，工作區變更會更新 epoch。出現 `instance_mismatch`、`workspace_changed` 或執行個體不可用錯誤時，重新探索並核對專案。

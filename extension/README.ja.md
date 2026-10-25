@@ -1,4 +1,4 @@
-# Live Share Workspace Tools
+# Live Share Workspace Bridge
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | **日本語**
 
@@ -12,8 +12,8 @@ Guest ウィンドウが使用する Profile にインストールし、更新�
 
 コマンド：
 
-- `Live Share Workspace Tools: Restart Connection`
-- `Live Share Workspace Tools: Stop Connection`
+- `Live Share Workspace Bridge: Restart Connection`
+- `Live Share Workspace Bridge: Stop Connection`
 
 [使い方](../docs/USAGE.ja.md)、[API リファレンス](../docs/API.ja.md)、[トラブルシューティング](../docs/TROUBLESHOOTING.ja.md)を参照してください。
 

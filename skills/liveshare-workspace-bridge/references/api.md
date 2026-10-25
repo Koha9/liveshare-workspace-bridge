@@ -83,15 +83,17 @@ Batch results are `{applied,saved,files:[{uri,version,dirty,saved,changes,error?
 
 ## Connection and component names
 
-`liveshare-workspace-bridge` is the skill name. The VS Code extension is a separate component; its verified identifiers are:
+The project, VS Code extension package, and Codex skill share the name `liveshare-workspace-bridge`. Their identifiers are:
 
 | Component | Identifier |
 |---|---|
-| VS Code extension ID | `Koha9-Lee.liveshare-workspace-tools` |
-| Extension display name | `Live Share Workspace Tools` |
-| Restart command ID | `liveshareWorkspace.restart` |
-| Command Palette entry | `Live Share Workspace Tools: Restart Connection` |
-| Output channel | `Live Share Workspace Tools` |
+| VS Code extension ID | `Koha9-Lee.liveshare-workspace-bridge` |
+| Extension display name | `Live Share Workspace Bridge` |
+| Restart command ID | `liveshareWorkspaceBridge.restart` |
+| Stop command ID | `liveshareWorkspaceBridge.stop` |
+| PowerShell override setting | `liveshareWorkspaceBridge.powershell` |
+| Command Palette entry | `Live Share Workspace Bridge: Restart Connection` |
+| Output channel | `Live Share Workspace Bridge` |
 
 If `instances` finds no usable workspace, check the Guest connection and the extension's installation in that window's Profile. Restart a stopped service with the command above, or follow VS Code's reload prompt after an update. Inspect the output channel only for an actual startup failure. Then rediscover and confirm the project once.
 
