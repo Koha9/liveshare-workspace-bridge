@@ -34,7 +34,14 @@ class ReleasePackageTests(unittest.TestCase):
             rebuilt = build.package_members(self.package)
         self.assertEqual(next(iter(rebuilt.values())), self.members)
         self.assertFalse(any('INVESTIGATION' in name or '.local' in name or '/test/' in name for name in self.members))
-        self.assertEqual(sum(name.startswith('extension/docs/') for name in self.members), 24)
+        stems = (
+            'README', 'USAGE', 'API', 'ARCHITECTURE', 'DEVELOPMENT',
+            'TROUBLESHOOTING', 'VALIDATION-v0.2', 'IPC-SECURITY',
+            'VALIDATION-v0.2.1', 'VALIDATION-v0.2.2',
+        )
+        locales = ('', '.zh-CN', '.zh-TW', '.ja')
+        expected = {f'extension/docs/{stem}{locale}.md' for stem in stems for locale in locales}
+        self.assertEqual({name for name in self.members if name.startswith('extension/docs/')}, expected)
 
     def test_reader_links_resolve_on_marketplace(self):
         repository = 'https://github.com/Koha9/liveshare-workspace-bridge'
