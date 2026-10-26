@@ -1,6 +1,6 @@
 {
   "name": "liveshare-workspace-bridge",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "private": true,
   "license": "MIT",
   "description": "Live Share Workspace Bridge VS Code extension and its Codex skill, maintained together.",

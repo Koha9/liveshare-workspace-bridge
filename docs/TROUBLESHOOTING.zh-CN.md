@@ -2,6 +2,8 @@
 
 [English](TROUBLESHOOTING.md) | **简体中文** | [繁體中文](TROUBLESHOOTING.zh-TW.md) | [日本語](TROUBLESHOOTING.ja.md)
 
+v0.2.2：**Configure IPC Access** 提供 ownerOnly（默认）、allLocalUsers 和按稳定 SID 保存的 selectedUsers。旧 true 只迁移原有指定账号，不自动放行全部账号。见 [IPC 三模式](IPC-SECURITY.zh-CN.md)，Host 权限仍独立。
+
 [文档](README.zh-CN.md)
 
 ## 连接与权限

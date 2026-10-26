@@ -49,27 +49,53 @@ async function request(instance, body, timeoutMs = 60000) {
     }
   }
 }
-function records() {
+function inspectRecords(options = {}) {
+  const location = options.registryPath || registry, disk = options.fsImpl || fs;
   let names;
-  try { names = fs.readdirSync(registry); } catch (err) { if (err.code === 'ENOENT') return []; throw err; }
-  const result = [];
+  try { names = disk.readdirSync(location); }
+  catch (err) { return { registry: { path: location, status: err.code === 'ENOENT' ? 'missing' : ['EACCES','EPERM'].includes(err.code) ? 'denied' : 'unavailable' }, records: [], issues: err.code === 'ENOENT' ? [] : [{ stage: 'registry', code: err.code || 'registry_unavailable' }] }; }
+  const result = [], issues = [];
   for (const name of names.filter(x => /^[0-9a-f-]+\.json$/u.test(x))) {
     try {
-      const entry = JSON.parse(fs.readFileSync(path.join(registry, name), 'utf8'));
-      if (/^[0-9a-f-]+$/u.test(entry.id) && /^liveshare-local-\d+-[0-9a-f-]+$/u.test(entry.pipeName)) result.push(entry);
-    } catch {} // Ignore incomplete or stale records; discovery below checks server identity.
+      const entry = JSON.parse(disk.readFileSync(path.join(location, name), 'utf8'));
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry) || !/^[0-9a-f-]+$/u.test(entry.id) || !/^liveshare-local-\d+-[0-9a-f-]+$/u.test(entry.pipeName)) throw Object.assign(new Error('Invalid instance record.'), { code: 'invalid_record' });
+      result.push(entry);
+    } catch (err) { issues.push({ stage: 'record', record: name, code: err.code || 'invalid_record' }); }
   }
-  return result;
+  return { registry: { path: location, status: 'ready' }, records: result, issues };
+}
+function records() {
+  const inspected = inspectRecords();
+  if (['denied','unavailable'].includes(inspected.registry.status)) throw Object.assign(new Error('Cannot read the bridge instance registry. Run diagnose for details.'), { code: 'discovery_access_failed', details: inspected });
+  return inspected.records;
+}
+async function discover(options = {}) {
+  const inspected = inspectRecords(options), found = [], probes = [], probe = options.probe || request;
+  for (const entry of inspected.records) {
+    try {
+      const response = await probe(entry, { op: 'info', instance: entry.id }, options.timeoutMs || 2000);
+      if (!response.ok || response.result?.id !== entry.id || !Array.isArray(response.result?.roots)) {
+        probes.push({ id: entry.id, status: 'invalid_response', code: response.error?.code || 'instance_identity_mismatch' }); continue;
+      }
+      found.push({ ...entry, epoch: response.result.epoch, roots: response.result.roots, info: response.result });
+      probes.push({ id: entry.id, status: 'connected', rootCount: response.result.roots.length });
+    } catch (err) {
+      probes.push({ id: entry.id, status: ['EPERM','EACCES'].includes(err.transportCode || err.code) ? 'denied' : err.transportCode === 'ENOENT' ? 'stale' : 'unreachable', code: err.code || 'probe_failed', ...(err.transportCode ? { transportCode: err.transportCode } : {}), ...(err.requestSent !== undefined ? { requestSent: err.requestSent } : {}) });
+    }
+  }
+  const denied = inspected.registry.status === 'denied' || inspected.issues.some(x => ['EPERM','EACCES'].includes(x.code)) || probes.some(x => x.status === 'denied');
+  const hasRoots = found.some(x => x.roots.length);
+  const failures = inspected.issues.length + probes.filter(x => x.status !== 'connected').length;
+  const status = hasRoots ? failures ? 'partial' : 'ready' : denied ? 'access_denied' : found.length ? 'no_shared_workspace' : inspected.records.length ? 'unavailable' : inspected.issues.length || inspected.registry.status === 'unavailable' ? 'invalid_registry' : 'no_records';
+  return { readOnly: true, registry: inspected.registry, recordCount: inspected.records.length, status, instances: found, probes, issues: inspected.issues };
+}
+function diagnosticReport(report) {
+  return { ...report, instances: report.instances.map(({id,epoch,version,pid,roots,ipc}) => ({id,epoch,version,pid,roots,ipc})) };
 }
 async function instances() {
-  const found = [];
-  for (const entry of records()) {
-    try {
-      const response = await request(entry, { op: 'info', instance: entry.id }, 2000);
-      if (response.ok && response.result.id === entry.id) found.push({ ...entry, epoch: response.result.epoch, roots: response.result.roots, info: response.result });
-    } catch {}
-  }
-  return found;
+  const report = await discover();
+  if (['access_denied','unavailable','invalid_registry'].includes(report.status)) throw Object.assign(new Error('Bridge discovery failed; this is not a verified empty workspace list. Run diagnose. For EPERM/EACCES ask the user to review Configure IPC Access and the selected local account SIDs; never change permissions automatically.'), { code: report.status === 'access_denied' ? 'discovery_access_denied' : 'discovery_unavailable', details: diagnosticReport(report) });
+  return report.instances;
 }
 function unsuccessful(response, op) {
   if (!response.ok) return true;
@@ -127,11 +153,12 @@ async function transferClient(mode, options) {
 }
 async function main() {
   const args = process.argv.slice(2), options = {};
+  if (args.length === 1 && args[0] === 'diagnose') { const report = await discover(); process.stdout.write(JSON.stringify({ ok: report.instances.some(x=>x.roots.length), result: diagnosticReport(report) }, null, 2)+'\n'); if (!report.instances.some(x=>x.roots.length)) process.exitCode=1; return; }
   const mode=['upload','download','apply-patch'].includes(args[0])?args.shift():null;
   while (args.length) {
     const key = args.shift();
     if (key === 'instances') { process.stdout.write(JSON.stringify(await instances(), null, 2) + '\n'); return; }
-    if (key === '--help') { process.stdout.write('instances | [--instance ID --epoch N --workspace URI] [--request FILE]\nupload --input LOCAL --path SHARED [--overwrite --expected-current-sha256 HASH]\ndownload --path SHARED --output LOCAL [--overwrite]\napply-patch --input LOCAL.patch [--check-only]\nPin instance/epoch/workspace on all operations. JSON from stdin when --request is omitted.\n'); return; }
+    if (key === '--help') { process.stdout.write('instances | diagnose (read-only discovery diagnostics) | [--instance ID --epoch N --workspace URI] [--request FILE]\nupload --input LOCAL --path SHARED [--overwrite --expected-current-sha256 HASH]\ndownload --path SHARED --output LOCAL [--overwrite] (unavailable in v0.2)\napply-patch --input LOCAL.patch [--check-only]\nPin instance/epoch/workspace on all operations. JSON from stdin when --request is omitted.\n'); return; }
     if(['--overwrite','--check-only','--progress'].includes(key)){options[key.slice(2)]=true;continue;}
     if (!['--instance', '--workspace', '--request', '--epoch','--input','--output','--path','--expected-current-sha256'].includes(key) || !args.length) throw new Error(`Unknown or incomplete option: ${key}`);
     options[key.slice(2)] = args.shift();
@@ -148,4 +175,4 @@ async function main() {
   if (unsuccessful(response,body.op)) process.exitCode = 1;
 }
 if (require.main === module) main().catch(err => { process.stdout.write(JSON.stringify({ ok: false, error: { code: err.code || 'client_error', message: err.message, ...(err.details !== undefined ? { details: err.details } : {}), ...(err.requestSent !== undefined ? { requestSent: err.requestSent } : {}) } }, null, 2) + '\n'); process.exitCode = 1; });
-module.exports = { request, instances, records, unsuccessful, transferClient };
+module.exports = { request, instances, records, inspectRecords, discover, diagnosticReport, unsuccessful, transferClient };

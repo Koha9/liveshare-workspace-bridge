@@ -2,6 +2,8 @@
 
 **English** | [简体中文](DEVELOPMENT.zh-CN.md) | [繁體中文](DEVELOPMENT.zh-TW.md) | [日本語](DEVELOPMENT.ja.md)
 
+v0.2.2: **Configure IPC Access** provides ownerOnly (default), allLocalUsers and selectedUsers with stable local SIDs. Legacy true migrates only to the existing selected accounts, never all users. See [IPC access modes](IPC-SECURITY.md). Host permissions remain independent.
+
 [Documentation](README.md)
 
 ## Requirements
@@ -59,3 +61,11 @@ The skill instructions and references are English-only; do not add locale varian
 ## v0.2 Host testing
 
 Host integration is opt-in and uses a dedicated RW shared PowerShell and unique fixtures. Permission changes made by a test must be leased and restored without overwriting concurrent user changes. Never stage/commit/push as part of tests. All Host features must be denied while terminal access is off. Normal tests must never fall back to a real Guest terminal.
+
+Opt-in local sandbox IPC acceptance (existing accounts only; temporary owned-workspace ACL setup; no Host commands):
+
+```powershell
+$env:LIVESHARE_RUN_SANDBOX = '1'
+$env:LIVESHARE_CODEX_EXE = '<absolute-path-to-codex.exe>'
+node .\extension\test\live-sandbox.cjs
+```

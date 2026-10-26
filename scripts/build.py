@@ -16,8 +16,8 @@ EXTENSION = ROOT / "extension"
 SKILL_NAME = "liveshare-workspace-bridge"
 SKILL = ROOT / "skills" / SKILL_NAME
 DIST = ROOT / "dist"
-RUNTIME_FILES = ("extension.cjs", "workspace.cjs", "core.cjs", "cli.cjs", "pipe-host.ps1", "permissions.cjs", "host-channel.cjs", "host-operations.cjs", "patch.cjs", "host-runtime.cs", "host-actions.ps1")
-DOCUMENT_NAMES = ("README", "USAGE", "API", "ARCHITECTURE", "DEVELOPMENT", "TROUBLESHOOTING", "VALIDATION-v0.2")
+RUNTIME_FILES = ("extension.cjs", "workspace.cjs", "core.cjs", "cli.cjs", "pipe-host.ps1", "pipe-security.cs", "local-accounts.cs", "ipc-access.cjs", "permissions.cjs", "host-channel.cjs", "host-operations.cjs", "patch.cjs", "host-runtime.cs", "host-actions.ps1")
+DOCUMENT_NAMES = ("README", "USAGE", "API", "ARCHITECTURE", "DEVELOPMENT", "TROUBLESHOOTING", "VALIDATION-v0.2", "IPC-SECURITY", "VALIDATION-v0.2.1", "VALIDATION-v0.2.2")
 LOCALES = ("", ".zh-CN", ".zh-TW", ".ja")
 SKILL_FILES = (
     "SKILL.md", "agents/openai.yaml", "references/api.md", "references/recovery.md",

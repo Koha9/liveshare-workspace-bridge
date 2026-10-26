@@ -2,6 +2,8 @@
 
 [English](README.md) | **简体中文** | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
+v0.2.2：**Configure IPC Access** 提供 ownerOnly（默认）、allLocalUsers 和按稳定 SID 保存的 selectedUsers。旧 true 只迁移原有指定账号，不自动放行全部账号。见 [IPC 三模式](docs/IPC-SECURITY.zh-CN.md)，Host 权限仍独立。
+
 通过 Windows 本机桥接，让 Codex 操作已经连接的 VS Code Live Share 工作区。v0.2 将文档编辑与可选的、经过验证的 Host RW PowerShell 通道结合起来，无需 HTTP 端口或复制 token。
 
 ## 功能
@@ -61,7 +63,7 @@ node .\extension\cli.cjs upload --instance '<id>' --epoch '<epoch>' --workspace 
 
 Guest 文档 EOL 不证明 Host 原始字节一致。Git 补丁行尾受 Host Git 配置影响。搜索采用 rg 忽略规则，不完全复刻 VS Code 条件排除。目录复制只允许新目标，可能部分失败，不合并或递归覆盖已有目录。
 
-命名管道仅当前 Windows 用户可访问。操作权限不是任意 Host 代码的操作系统沙箱。Host 子进程使用 Windows Job Object，超时和取消针对自有进程树，不针对共享 PowerShell。上传临时资源有空闲过期和完整性校验。
+命名管道默认仅当前 Windows 用户可访问；明确选择额外本机账号接入时，接入范围见前述 IPC 安全说明。操作权限不是任意 Host 代码的操作系统沙箱。Host 子进程使用 Windows Job Object，超时和取消针对自有进程树，不针对共享 PowerShell。上传临时资源有空闲过期和完整性校验。
 
 约 1.1 MB 的实际下载曾多次使共享终端停止回应，根因未解决。`transferOpenRead`／`transferRead`（含 CLI download）在派发 Host 命令前返回 `feature_unavailable`。不要循环小块读取绕过；请用户提供可访问副本。具体证据见[验收记录](docs/VALIDATION-v0.2.zh-CN.md)。
 

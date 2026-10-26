@@ -2,7 +2,9 @@
 
 [English](README.md) | **简体中文** | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
-通过仅当前用户可访问的 Windows IPC 读取、编辑和保存共享文档。可选的已验证 Host RW PowerShell 通道提供已保存文件完整搜索、有界命令、经检查的文本补丁、保持字节的复制和分块大文件上传，无需 HTTP 端口或复制 token。
+v0.2.2：**Configure IPC Access** 提供 ownerOnly（默认）、allLocalUsers 和按稳定 SID 保存的 selectedUsers。旧 true 只迁移原有指定账号，不自动放行全部账号。见 [IPC 三模式](../docs/IPC-SECURITY.zh-CN.md)，Host 权限仍独立。
+
+通过默认仅当前用户可访问的 Windows IPC 读取、编辑和保存共享文档。可选的已验证 Host RW PowerShell 通道提供已保存文件完整搜索、有界命令、经检查的文本补丁、保持字节的复制和分块大文件上传，无需 HTTP 端口或复制 token。
 
 打开 **Live Share Workspace Bridge: Configure Agent Permissions**。英文 User 设置提供 agent 总开关、单项权限和联动终端开关（默认关闭）。状态栏显示权限模式，Host allowed 不代表已验证连接。缺少 Host 终端时 skill 请求用户一次并等待，不用普通 Guest 终端替代。
 

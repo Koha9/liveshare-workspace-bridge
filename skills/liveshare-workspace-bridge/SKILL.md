@@ -1,13 +1,13 @@
 ---
 name: liveshare-workspace-bridge
-description: "Read, edit, search, and save a Windows VS Code Live Share Guest workspace through Live Share Workspace Bridge. Use its verified Host RW PowerShell channel for complete saved-file search, commands, patches, byte operations, and large transfers."
+description: "Read, edit, search, and save a Windows VS Code Live Share Guest workspace through Live Share Workspace Bridge. Diagnose local IPC access and use its verified Host RW PowerShell channel for saved-file search, commands, patches, bytes, and large uploads."
 metadata:
-  version: "0.2.0"
+  version: "0.2.2"
 ---
 
 # Live Share Workspace Bridge
 
-Use this skill's `scripts/liveshare.cjs` with extension v0.2. The local connection is a current-user Windows named pipe; no HTTP port or token is required. Host access is optional and controlled by the user's extension settings.
+Use this skill's `scripts/liveshare.cjs` with extension v0.2.2. The local connection is a Windows named pipe, owner-only by default with explicit local-account access modes available; no HTTP port or token is required. Host access is optional and controlled by the user's extension settings.
 
 ## Connect once
 
@@ -21,6 +21,16 @@ node "<skill-dir>/scripts/liveshare.cjs" --instance "<id>" --epoch "<epoch>" --w
 Match the intended project by root name and complete URI; retain its ID, epoch and root. Reuse that selection rather than rediscovering or listing the root every time. Shared paths are workspace-relative with forward slashes; local shell/rg/apply_patch cannot operate on `vsls:`.
 
 Inspect version and effective permissions. A v0.1 extension does not provide the v0.2 Host APIs. Permission changes take effect without restart. Identify disabled settings and wait for the user to enable them; never edit permission settings or switch routes to bypass a denied operation.
+
+## Diagnose local discovery before changing the connection
+
+With v0.2.2, use `node "<skill-dir>/scripts/liveshare.cjs" diagnose` if discovery fails, returns no intended root, or reports EPERM/EACCES. This is read-only: registry inspection and info requests only, with no Host binding, terminal command or shared-file write. Inspect registry status, probes, transportCode and requestSent. Only no_records is verified absence of records; access_denied, stale/unreachable probes and no_shared_workspace have different remedies. Do not tell the user to enable/reinstall an already-running extension solely because discovery did not return the project.
+
+Legacy Windows Codex sandboxes can use another local Windows identity. For EPERM/EACCES, inspect ipc.mode, allowedUsers and selectionIssues from diagnostics/info and ask the user once to review **Configure IPC Access**. ownerOnly is the release default; selectedUsers saves machine-local SIDs and is the narrow option for named accounts. allLocalUsers trusts all current local SAM users and must never be an automatic repair. Both additional-user modes reject remote/domain users and require the same Windows session; the owner is always retained. Trust applies to every process of allowed accounts, outside Codex filesystem sandbox limits, subject to bridge permissions. If terminal access is enabled and Host requirements are met, it may also permit Host commands. Never enable Host access as part of IPC setup.
+
+The account picker shows names but persists ipc.selectedUserSids. Renaming preserves the SID; deleted/recreated or foreign/invalid identities are not substituted. Ask the user to resolve unavailable selections. An enabled legacy boolean with no new mode migrates once to selectedUsers and pins only existing legacy account SIDs; it never migrates to allLocalUsers. Do not infer a historical SID from a boolean if the account was already deleted/recreated. Old running versions do not honor the new modes until updated/reloaded.
+
+User setting changes/migration restart the bridge and change its instance/epoch. Explain the effect and obtain any required deployment approval before installing/reloading an active environment. Wait for the user's confirmation, rediscover once and bind the intended root. Unknown sent mutations still require inspection before retry. Never automatically widen ACLs, disable sandboxing, select allLocalUsers or use an unapproved route. Computer Use helper setup failures are separate from bridge IPC failures.
 
 ## Missing Host RW terminal: ask once and wait
 

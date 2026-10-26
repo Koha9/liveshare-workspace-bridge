@@ -1,10 +1,18 @@
-param([Parameter(Mandatory)][string]$PipeName, [int]$ParentProcessId = 0)
+param([string]$PipeName, [int]$ParentProcessId = 0, [ValidateSet('ownerOnly','allLocalUsers','selectedUsers')][string]$AccessMode='ownerOnly', [string]$SelectedSidsBase64='W10=', [switch]$ListLocalUsers)
 $ErrorActionPreference = 'Stop'
 $utf8 = [Text.UTF8Encoding]::new($false)
 [Console]::InputEncoding = $utf8
 [Console]::OutputEncoding = $utf8
-$announced = $false
 $parentProcess = if ($ParentProcessId -gt 0) { [Diagnostics.Process]::GetProcessById($ParentProcessId) } else { $null }
+Add-Type -Path @((Join-Path $PSScriptRoot 'local-accounts.cs'),(Join-Path $PSScriptRoot 'pipe-security.cs'))
+if($ListLocalUsers){[Console]::Out.WriteLine((ConvertTo-Json -InputObject @([LswbIpcV022.LocalAccounts]::Read()) -Compress -Depth 4));exit 0}
+$selected=ConvertFrom-Json -InputObject ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($SelectedSidsBase64)))
+if($null -eq $selected){$selected=@()}
+$localPipe = [LswbIpcV022.LocalPipe]::new($PipeName, $AccessMode, [string[]]$selected)
+$pipe = $localPipe.Stream
+$ready = @{kind='ready';ipc=@{mode=$localPipe.Mode;allowedUsers=@($localPipe.AllowedUsers);selectionIssues=@($localPipe.SelectionIssues);localOnly=$true;sameWindowsSession=$true}}
+[Console]::Out.WriteLine(($ready|ConvertTo-Json -Compress -Depth 4))
+[Console]::Out.Flush()
 function Wait-Task($Task, [int]$TimeoutMs) {
     $stopAt = if ($TimeoutMs -gt 0) { [DateTime]::UtcNow.AddMilliseconds($TimeoutMs) } else { [DateTime]::MaxValue }
     while (-not $Task.Wait(500)) {
@@ -13,30 +21,17 @@ function Wait-Task($Task, [int]$TimeoutMs) {
     }
 }
 while ($true) {
-    $pipe = $null
+    $reader = $null; $writer = $null
     try {
-        if ([Enum]::GetNames([IO.Pipes.PipeOptions]) -contains 'CurrentUserOnly') {
-            $options = [IO.Pipes.PipeOptions]::CurrentUserOnly -bor [IO.Pipes.PipeOptions]::Asynchronous
-            $pipe = [IO.Pipes.NamedPipeServerStream]::new($PipeName, [IO.Pipes.PipeDirection]::InOut, 1, [IO.Pipes.PipeTransmissionMode]::Byte, $options)
-        } else {
-            # Windows PowerShell 5.1 / .NET Framework: explicit owner-only DACL.
-            $ownerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User
-            $security = [IO.Pipes.PipeSecurity]::new()
-            $security.SetAccessRuleProtection($true, $false)
-            $security.SetOwner($ownerSid)
-            $security.AddAccessRule([IO.Pipes.PipeAccessRule]::new($ownerSid, [IO.Pipes.PipeAccessRights]::FullControl, [Security.AccessControl.AccessControlType]::Allow))
-            $pipe = [IO.Pipes.NamedPipeServerStream]::new($PipeName, [IO.Pipes.PipeDirection]::InOut, 1, [IO.Pipes.PipeTransmissionMode]::Byte, [IO.Pipes.PipeOptions]::Asynchronous, 4096, 4096, $security)
-        }
-        if (-not $announced) {
-            [Console]::Out.WriteLine('{"kind":"ready"}')
-            [Console]::Out.Flush()
-            $announced = $true
-        }
         Wait-Task ($pipe.WaitForConnectionAsync()) 0
-        $reader = [IO.StreamReader]::new($pipe, $utf8, $false, 4096, $true)
         $writer = [IO.StreamWriter]::new($pipe, $utf8, 4096, $true)
         $writer.AutoFlush = $true
-        $readTask = $reader.ReadLineAsync()
+        if (-not $localPipe.ClientIsInSession()) {
+            $writer.WriteLine('{"ok":false,"error":{"code":"ipc_client_session_denied","message":"Bridge clients must be in the same Windows session."}}')
+            $null=$localPipe.Drain(2000)
+            continue
+        }
+        $readTask = [LswbIpcV022.LocalPipe]::ReadFrameAsync($pipe,2097152)
         Wait-Task $readTask 15000
         $line = $readTask.Result
         if ($null -eq $line -or $line.Length -gt 2097152) { throw 'invalid_frame' }
@@ -44,15 +39,17 @@ while ($true) {
         [Console]::Out.WriteLine('{"kind":"request","body":' + $line + '}')
         [Console]::Out.Flush()
         $replyTask = [Console]::In.ReadLineAsync()
-        Wait-Task $replyTask 120000
+        try { Wait-Task $replyTask 120000 } catch { [Console]::Error.WriteLine('ipc_dispatch_timeout: request outcome may be unknown'); exit 1 }
         $reply = $replyTask.Result
         if ($null -eq $reply) { exit 0 }
         $writer.WriteLine($reply)
-        $writer.Dispose()
-        $reader.Dispose()
+        if (-not $localPipe.Drain(2000)) { [Console]::Error.WriteLine('pipe_client_drain_timeout') }
     } catch {
         [Console]::Error.WriteLine('pipe_connection_failed: ' + $_.Exception.GetType().Name)
     } finally {
-        if ($null -ne $pipe) { $pipe.Dispose() }
+        if ($null -ne $writer) { $writer.Dispose() }
+        if ($null -ne $reader) { $reader.Dispose() }
+        # Hold the sole server handle for the helper's lifetime; no re-creation gap.
+        try { $localPipe.Disconnect() } catch { [Console]::Error.WriteLine('pipe_disconnect_failed'); exit 1 }
     }
 }

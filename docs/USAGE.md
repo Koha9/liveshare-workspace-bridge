@@ -2,6 +2,8 @@
 
 **English** | [简体中文](USAGE.zh-CN.md) | [繁體中文](USAGE.zh-TW.md) | [日本語](USAGE.ja.md)
 
+v0.2.2: **Configure IPC Access** provides ownerOnly (default), allLocalUsers and selectedUsers with stable local SIDs. Legacy true migrates only to the existing selected accounts, never all users. See [IPC access modes](IPC-SECURITY.md). Host permissions remain independent.
+
 [Documentation](README.md)
 
 1. Install the VSIX in the connected Guest window's Profile and install the matching skill.

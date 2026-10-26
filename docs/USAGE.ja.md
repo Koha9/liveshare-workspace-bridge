@@ -2,6 +2,8 @@
 
 [English](USAGE.md) | [简体中文](USAGE.zh-CN.md) | [繁體中文](USAGE.zh-TW.md) | **日本語**
 
+v0.2.2：**Configure IPC Access** は ownerOnly（既定）、allLocalUsers、安定 SID の selectedUsers を提供します。旧 true は既存の選択アカウントだけへ移行し、全員を自動許可しません。[IPC モード](IPC-SECURITY.ja.md)を参照してください。Host 権限は独立です。
+
 [ドキュメント](README.ja.md)
 
 1. 接続済み Guest ウィンドウの Profile に VSIX と対応する skill をインストールします。

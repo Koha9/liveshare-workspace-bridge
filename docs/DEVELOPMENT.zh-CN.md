@@ -2,6 +2,8 @@
 
 [English](DEVELOPMENT.md) | **简体中文** | [繁體中文](DEVELOPMENT.zh-TW.md) | [日本語](DEVELOPMENT.ja.md)
 
+v0.2.2：**Configure IPC Access** 提供 ownerOnly（默认）、allLocalUsers 和按稳定 SID 保存的 selectedUsers。旧 true 只迁移原有指定账号，不自动放行全部账号。见 [IPC 三模式](IPC-SECURITY.zh-CN.md)，Host 权限仍独立。
+
 [文档](README.zh-CN.md)
 
 ## 环境
@@ -51,3 +53,11 @@ v0.2 Host 验证需要专用 RW 共享 PowerShell 和自有唯一测试目录。
 英文无语言后缀，翻译使用 `.zh-CN`、`.zh-TW`、`.ja`，对应页面互链。保持命令、API 字段、数值限制、权限默认值和失败边界一致；不要翻译实际设置名称或 API 标识符。翻译更新后检查链接与代码示例，并重新构建验证包。
 
 `dist/`、`.local/`、依赖和本地配置不进 Git。不要提交 token、本机回执、用户目录或 Host 原始路径。`.github/workflows/ci.yml` 在 Windows 上检查和构建，不发布。验收文档只记录可分享的结果，不包含私有回执内容。
+
+显式启用的本机沙箱 IPC 验收：只使用已有账户，初始化仅针对自有临时工作区，不发 Host 命令。
+
+```powershell
+$env:LIVESHARE_RUN_SANDBOX = '1'
+$env:LIVESHARE_CODEX_EXE = '<absolute-path-to-codex.exe>'
+node .\extension\test\live-sandbox.cjs
+```

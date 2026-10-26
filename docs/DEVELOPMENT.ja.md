@@ -2,6 +2,8 @@
 
 [English](DEVELOPMENT.md) | [简体中文](DEVELOPMENT.zh-CN.md) | [繁體中文](DEVELOPMENT.zh-TW.md) | **日本語**
 
+v0.2.2：**Configure IPC Access** は ownerOnly（既定）、allLocalUsers、安定 SID の selectedUsers を提供します。旧 true は既存の選択アカウントだけへ移行し、全員を自動許可しません。[IPC モード](IPC-SECURITY.ja.md)を参照してください。Host 権限は独立です。
+
 [ドキュメント](README.ja.md)
 
 ## 要件
@@ -51,3 +53,11 @@ v0.2 Host 検証には専用 RW 共有 PowerShell と所有する一意なテス
 英語は言語接尾辞なし、翻訳は `.zh-CN/.zh-TW/.ja` で対応ページを相互リンクします。コマンド、API 識別子、数値上限、既定権限、失敗条件を一致させます。実際の設定名と API 名は翻訳しません。文書変更後にリンクとコード例を検証し、パッケージを再ビルドします。
 
 `dist/`、`.local/`、依存関係、ローカル設定は Git 対象外です。token、ローカル受領記録、ユーザーディレクトリ、Host の生パスをコミットしません。`.github/workflows/ci.yml` は Windows 上で検査／ビルドし、公開はしません。検証文書には共有可能な結果だけを記載します。
+
+明示実行のローカル sandbox IPC 検証（既存アカウント、所有一時領域の初期化、Host コマンドなし）：
+
+```powershell
+$env:LIVESHARE_RUN_SANDBOX = '1'
+$env:LIVESHARE_CODEX_EXE = '<absolute-path-to-codex.exe>'
+node .\extension\test\live-sandbox.cjs
+```

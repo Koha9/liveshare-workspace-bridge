@@ -2,6 +2,8 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | **日本語**
 
+v0.2.2：**Configure IPC Access** は ownerOnly（既定）、allLocalUsers、安定 SID の selectedUsers を提供します。旧 true は既存の選択アカウントだけへ移行し、全員を自動許可しません。[IPC モード](IPC-SECURITY.ja.md)を参照してください。Host 権限は独立です。
+
 目的に応じてガイドを選んでください。
 
 | ガイド | 内容 |

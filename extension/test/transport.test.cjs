@@ -7,7 +7,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const { request } = require('../cli.cjs');
-test('CurrentUserOnly PowerShell pipe round-trips consecutive UTF-8 requests without TCP or tokens', { skip: process.platform !== 'win32', timeout: 20000 }, async t => {
+test('owner-only local pipe preserves rapid UTF-8 replies, bounds input and never replays uncertain requests', { skip: process.platform !== 'win32', timeout: 20000 }, async t => {
   const pwsh = process.env.LIVESHARE_TEST_PWSH || path.join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const pipeName = `liveshare-local-${process.pid}-${crypto.randomUUID()}`;
   const child = spawn(pwsh, ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', path.join(__dirname, '..', 'pipe-host.ps1'), '-PipeName', pipeName], { windowsHide: true });
@@ -28,11 +28,10 @@ test('CurrentUserOnly PowerShell pipe round-trips consecutive UTF-8 requests wit
     });
   });
   await ready;
-  for (const text of ['中文😀\r\n', '', 'second request']) {
+  for (const text of ['中文😀\r\n', '', 'second request', ...Array.from({length:20},(_,i)=>'rapid '+i)]) {
     const body = { text };
     const response = await request({ pipeName }, body);
     assert.deepEqual(response, { ok: true, result: body });
-    await new Promise(resolve => setTimeout(resolve, 100));
   }
   assert.equal(errors, '');
   const id = pipeName.split('-').slice(3).join('-');
@@ -52,6 +51,16 @@ test('CurrentUserOnly PowerShell pipe round-trips consecutive UTF-8 requests wit
   assert.equal(result.code, 0, result.stdout + result.stderr);
   assert.equal(received.length - countBefore, 1, 'Selected instance should receive only the requested operation, without info ping.');
   assert.equal(received.at(-1).op, 'read');
+  const countBeforeInvalid = received.length;
+  for (const invalid of [Buffer.alloc(2*1024*1024+1,120),Buffer.from([255,10])]) {
+    await new Promise((resolve,reject)=>{
+      const socket=require('node:net').createConnection('\\\\.\\pipe\\'+pipeName);
+      const timer=setTimeout(()=>{socket.destroy();reject(new Error('Invalid frame was not disconnected'));},3000);
+      socket.on('error',()=>{});socket.once('connect',()=>socket.end(invalid));socket.once('close',()=>{clearTimeout(timer);resolve()});
+    });
+  }
+  assert.equal(received.length,countBeforeInvalid,'Oversized and malformed UTF-8 frames must not reach dispatch.');
+  assert.equal((await request({pipeName},{op:'afterInvalid'})).ok,true,'Rejected clients must not break the persistent server.');
   await assert.rejects(request({ pipeName }, { op: 'noReply' }, 200), { code: 'transport_outcome_unknown', requestSent: true });
   assert.equal(received.filter(x => x.op === 'noReply').length, 1, 'Uncertain requests must never be resent.');
 });

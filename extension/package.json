@@ -2,7 +2,7 @@
   "name": "liveshare-workspace-bridge",
   "displayName": "Live Share Workspace Bridge",
   "description": "Edit Live Share workspaces with permission controls and an optional verified Host PowerShell bridge, without ports or copied tokens.",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "publisher": "Koha9-Lee",
   "license": "MIT",
   "repository": {
@@ -42,7 +42,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.cjs",
-    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-operations.cjs && node --check patch.cjs"
+    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs"
   },
   "contributes": {
     "commands": [
@@ -57,6 +57,10 @@
       {
         "command": "liveshareWorkspaceBridge.openSettings",
         "title": "Live Share Workspace Bridge: Configure Agent Permissions"
+      },
+      {
+        "command": "liveshareWorkspaceBridge.configureAccess",
+        "title": "Live Share Workspace Bridge: Configure IPC Access"
       }
     ],
     "configuration": {
@@ -66,21 +70,21 @@
           "type": "string",
           "default": "",
           "scope": "machine",
-          "description": "Optional PowerShell executable override. Defaults to built-in Windows PowerShell; pipe access is restricted to the current Windows user."
+          "description": "Optional PowerShell executable override. Defaults to Windows PowerShell. IPC Access Mode controls additional machine-local users; the release default is ownerOnly."
         },
         "liveshareWorkspaceBridge.agent.enabled": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 1,
-          "markdownDescription": "**Allow Agent Access** \u2014 Master switch for all shared-workspace operations. Disabling it takes effect on subsequent requests."
+          "markdownDescription": "**Allow Agent Access** — Master switch for all shared-workspace operations. Disabling it takes effect on subsequent requests."
         },
         "liveshareWorkspaceBridge.terminal.enabled": {
           "type": "boolean",
           "default": false,
           "scope": "machine",
           "order": 2,
-          "markdownDescription": "**Allow Shared Host Terminal Access** \u2014 Enable Host-dependent operations. Connection binding creates and removes owned temporary handshake files. Turning this off blocks new Host work without rolling back dispatched work. Child commands retain their configured timeout."
+          "markdownDescription": "**Allow Shared Host Terminal Access** — Enable Host-dependent operations. Connection binding creates and removes owned temporary handshake files. Turning this off blocks new Host work without rolling back dispatched work. Child commands retain their configured timeout."
         },
         "liveshareWorkspaceBridge.terminal.name": {
           "type": "string",
@@ -137,182 +141,220 @@
           "default": true,
           "scope": "machine",
           "order": 20,
-          "markdownDescription": "**List directories** \u2014 Allow the agent to list shared directories."
+          "markdownDescription": "**List directories** — Allow the agent to list shared directories."
         },
         "liveshareWorkspaceBridge.permissions.read": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 21,
-          "markdownDescription": "**Read text** \u2014 Allow buffered text reads, batch reads and explicit provider verification."
+          "markdownDescription": "**Read text** — Allow buffered text reads, batch reads and explicit provider verification."
         },
         "liveshareWorkspaceBridge.permissions.create": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 22,
-          "markdownDescription": "**Create text files** \u2014 Allow creation of new shared text files."
+          "markdownDescription": "**Create text files** — Allow creation of new shared text files."
         },
         "liveshareWorkspaceBridge.permissions.write": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 23,
-          "markdownDescription": "**Replace whole documents** \u2014 Allow guarded full-document text replacement."
+          "markdownDescription": "**Replace whole documents** — Allow guarded full-document text replacement."
         },
         "liveshareWorkspaceBridge.permissions.edit": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 24,
-          "markdownDescription": "**Edit text** \u2014 Allow text replacements and multi-file text edits."
+          "markdownDescription": "**Edit text** — Allow text replacements and multi-file text edits."
         },
         "liveshareWorkspaceBridge.permissions.save": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 25,
-          "markdownDescription": "**Save documents** \u2014 Allow target-document saves, including saves performed by editing operations."
+          "markdownDescription": "**Save documents** — Allow target-document saves, including saves performed by editing operations."
         },
         "liveshareWorkspaceBridge.permissions.mkdir": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 26,
-          "markdownDescription": "**Create directories** \u2014 Allow shared directory creation, including missing parent directories."
+          "markdownDescription": "**Create directories** — Allow shared directory creation, including missing parent directories."
         },
         "liveshareWorkspaceBridge.permissions.copy": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 27,
-          "markdownDescription": "**Copy files** \u2014 Allow byte-preserving file copies through the shared Host terminal. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Copy files** — Allow byte-preserving file copies through the shared Host terminal. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.copyDirectory": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 28,
-          "markdownDescription": "**Copy directories** \u2014 Allow directory copies through the shared Host terminal. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Copy directories** — Allow directory copies through the shared Host terminal. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.move": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 29,
-          "markdownDescription": "**Move and rename paths** \u2014 Allow moving or renaming shared files and directories."
+          "markdownDescription": "**Move and rename paths** — Allow moving or renaming shared files and directories."
         },
         "liveshareWorkspaceBridge.permissions.delete": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 30,
-          "markdownDescription": "**Delete files and empty directories** \u2014 Allow deletion of individual files and empty directories. Recursive deletion is not provided."
+          "markdownDescription": "**Delete files and empty directories** — Allow deletion of individual files and empty directories. Recursive deletion is not provided."
         },
         "liveshareWorkspaceBridge.permissions.stat": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 31,
-          "markdownDescription": "**Read metadata** \u2014 Allow provider metadata and explicitly requested Host metadata."
+          "markdownDescription": "**Read metadata** — Allow provider metadata and explicitly requested Host metadata."
         },
         "liveshareWorkspaceBridge.permissions.diagnostics": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 32,
-          "markdownDescription": "**Read diagnostics** \u2014 Allow reading language diagnostics for shared documents."
+          "markdownDescription": "**Read diagnostics** — Allow reading language diagnostics for shared documents."
         },
         "liveshareWorkspaceBridge.permissions.symbols": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 33,
-          "markdownDescription": "**Read document symbols** \u2014 Allow document outline queries."
+          "markdownDescription": "**Read document symbols** — Allow document outline queries."
         },
         "liveshareWorkspaceBridge.permissions.workspaceSymbols": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 34,
-          "markdownDescription": "**Read workspace symbols** \u2014 Allow language-aware workspace symbol queries."
+          "markdownDescription": "**Read workspace symbols** — Allow language-aware workspace symbol queries."
         },
         "liveshareWorkspaceBridge.permissions.definition": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 35,
-          "markdownDescription": "**Find definitions** \u2014 Allow language-aware definition queries."
+          "markdownDescription": "**Find definitions** — Allow language-aware definition queries."
         },
         "liveshareWorkspaceBridge.permissions.references": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 36,
-          "markdownDescription": "**Find references** \u2014 Allow language-aware reference queries."
+          "markdownDescription": "**Find references** — Allow language-aware reference queries."
         },
         "liveshareWorkspaceBridge.permissions.renameSymbol": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 37,
-          "markdownDescription": "**Rename symbols** \u2014 Allow previewing and applying language-service symbol renames."
+          "markdownDescription": "**Rename symbols** — Allow previewing and applying language-service symbol renames."
         },
         "liveshareWorkspaceBridge.permissions.format": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 38,
-          "markdownDescription": "**Format documents** \u2014 Allow language-service document formatting."
+          "markdownDescription": "**Format documents** — Allow language-service document formatting."
         },
         "liveshareWorkspaceBridge.permissions.search": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 39,
-          "markdownDescription": "**Search content** \u2014 Allow Host content search and explicitly selected editor snapshots. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Search content** — Allow Host content search and explicitly selected editor snapshots. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.findFiles": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 40,
-          "markdownDescription": "**Find paths** \u2014 Allow Host path discovery and explicitly selected provider snapshots. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Find paths** — Allow Host path discovery and explicitly selected provider snapshots. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.applyPatch": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 41,
-          "markdownDescription": "**Apply text patches** \u2014 Allow checked Host Git text patches inside the bound workspace. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Apply text patches** — Allow checked Host Git text patches inside the bound workspace. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.readBytes": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 42,
-          "markdownDescription": "**Read bytes** \u2014 Allow byte-preserving Host reads and raw-byte hashes. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Read bytes** — Allow byte-preserving Host reads and raw-byte hashes. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.writeBytes": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 43,
-          "markdownDescription": "**Write bytes** \u2014 Allow byte-preserving Host writes with explicit overwrite rules. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Write bytes** — Allow byte-preserving Host writes with explicit overwrite rules. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.largeTransfers": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 44,
-          "markdownDescription": "**Upload large files** \u2014 Allow chunked Host file uploads. Write Bytes permission also applies. Large downloads are unavailable in v0.2 because sustained shared-terminal output did not pass live validation. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Upload large files** — Allow chunked Host file uploads. Write Bytes permission also applies. Large downloads are unavailable in v0.2 because sustained shared-terminal output did not pass live validation. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.hostExec": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 45,
-          "markdownDescription": "**Run Host commands** \u2014 Allow arbitrary commands in a bounded Host child process. Requires all other operation permissions because raw commands cannot enforce per-operation restrictions. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Run Host commands** — Allow arbitrary commands in a bounded Host child process. Requires all other operation permissions because raw commands cannot enforce per-operation restrictions. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+        },
+        "liveshareWorkspaceBridge.ipc.allowCodexSandboxClients": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "order": 11,
+          "deprecationMessage": "Use IPC Access Mode. A previously enabled legacy setting migrates once to selectedUsers and pinned local account SIDs, never to allLocalUsers.",
+          "markdownDescription": "Legacy v0.2.1 compatibility only. Ignored when IPC Access Mode is explicitly configured. Migration pins the two existing sandbox accounts by SID; it does not create accounts or broaden trust."
+        },
+        "liveshareWorkspaceBridge.ipc.accessMode": {
+          "type": "string",
+          "enum": [
+            "ownerOnly",
+            "allLocalUsers",
+            "selectedUsers"
+          ],
+          "enumDescriptions": [
+            "Only the Windows user running VS Code (release default).",
+            "All current machine-local SAM user accounts, in the same Windows session. No remote or domain users.",
+            "Only the owner and selected machine-local user SIDs, in the same Windows session."
+          ],
+          "default": "ownerOnly",
+          "scope": "machine",
+          "order": 9,
+          "markdownDescription": "**IPC Access Mode** — Trust applies to every process under allowed accounts, not only Codex. Calls use bridge permissions outside Codex filesystem sandbox limits. Host access is independent; when enabled it may allow Host commands. Changes restart the bridge; rediscover afterward. Use Configure IPC Access to choose users."
+        },
+        "liveshareWorkspaceBridge.ipc.selectedUserSids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^S-1-5-21-[0-9]+-[0-9]+-[0-9]+-[0-9]+$"
+          },
+          "uniqueItems": true,
+          "maxItems": 256,
+          "default": [],
+          "scope": "machine",
+          "order": 10,
+          "markdownDescription": "**Selected Local Account SIDs** — Used only by selectedUsers. Configure IPC Access displays names but saves stable SIDs. Renames keep access; deleted/recreated accounts are not substituted. Invalid, foreign and unavailable SIDs are never granted."
         }
       }
     }

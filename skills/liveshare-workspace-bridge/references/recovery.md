@@ -1,5 +1,10 @@
 # Recovery
 
+- **discovery_access_denied / EPERM / EACCES:** Run the read-only CLI diagnose once. If a legacy Codex sandbox identity cannot reach the desktop user's owner-only pipe, ask the user to manually review Configure IPC Access and explain the trust boundary. The default is ownerOnly; selectedUsers pins local SIDs. Do not automatically choose allLocalUsers. Do not automatically enable it, widen ACLs or leave the sandbox. Rediscover after the user confirms a change.
+- **no_records:** No instance records were found at the reported registry path. Check the intended Profile/extension with the user; this is different from a denied pipe.
+- **no_shared_workspace:** An instance answered info but has no Live Share root. Ask the user to reconnect the intended Guest session; do not guess a root.
+- **unavailable / invalid_registry / partial:** Inspect per-record/probe failures. Stale ENOENT is not EPERM. A healthy matching instance may still be usable with unrelated stale records; do not delete records as routine recovery.
+
 For a requested step that the bridge cannot perform, explain the limitation and request user assistance with exact paths and the desired result. Wait for their response before dependent work. Keep one unresolved request per step; do not repeat prompts, infer success from silence, or bypass the limit with raw commands or repeated small operations. See the unsupported-operations section in SKILL.md for large downloads, recursive deletion, atomic saves, unavailable language providers and buffer conflicts.
 
 - **host_terminal_required:** Ask the user once to have the Host open/share a RW PowerShell terminal; wait. No Guest terminal, substitute, repeated prompt or polling.

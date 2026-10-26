@@ -2,6 +2,8 @@
 
 **English** | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
+v0.2.2: **Configure IPC Access** provides ownerOnly (default), allLocalUsers and selectedUsers with stable local SIDs. Legacy true migrates only to the existing selected accounts, never all users. See [IPC access modes](docs/IPC-SECURITY.md). Host permissions remain independent.
+
 Let Codex work with a connected VS Code Live Share workspace through a local Windows bridge. v0.2 combines target-document editing with an optional verified Host read/write PowerShell channel. No HTTP port or copied token is needed.
 
 ## Features
@@ -63,7 +65,7 @@ Ordinary text edits reuse document versions, apply one related batch and save on
 
 Document EOL is not raw Host byte fidelity. Git patches follow Host Git configuration. Search uses saved files and rg ignore rules, not a full replica of every VS Code conditional exclude. Directory copy can partially fail; it requires a new destination and does not merge/recursively replace an existing one.
 
-The local pipe is restricted to the current Windows user. Operation permissions are not an OS sandbox for arbitrary Host code. Host jobs use owned Windows Job Objects; child process trees are bounded and isolated from the shared PowerShell. Large transfers have idle expiry and explicit integrity checks.
+The local pipe is restricted to the current Windows user by default; explicit local-account access modes are described above. Operation permissions are not an OS sandbox for arbitrary Host code. Host jobs use owned Windows Job Objects; child process trees are bounded and isolated from the shared PowerShell. Large transfers have idle expiry and explicit integrity checks.
 
 ## Development
 

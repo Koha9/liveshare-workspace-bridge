@@ -2,6 +2,8 @@
 
 [English](API.md) | [简体中文](API.zh-CN.md) | **繁體中文** | [日本語](API.ja.md)
 
+v0.2.2：**Configure IPC Access** 提供 ownerOnly（預設）、allLocalUsers 及穩定 SID 的 selectedUsers。舊 true 僅遷移既有指定帳戶，不自動允許全部帳戶。見 [IPC 三模式](IPC-SECURITY.zh-TW.md)，Host 權限獨立。
+
 [文件](README.zh-TW.md)
 
 ## 協議

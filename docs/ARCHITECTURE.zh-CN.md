@@ -2,6 +2,8 @@
 
 [English](ARCHITECTURE.md) | **简体中文** | [繁體中文](ARCHITECTURE.zh-TW.md) | [日本語](ARCHITECTURE.ja.md)
 
+v0.2.2：**Configure IPC Access** 提供 ownerOnly（默认）、allLocalUsers 和按稳定 SID 保存的 selectedUsers。旧 true 只迁移原有指定账号，不自动放行全部账号。见 [IPC 三模式](IPC-SECURITY.zh-CN.md)，Host 权限仍独立。
+
 [文档](README.zh-CN.md)
 
 ## 模块职责
@@ -27,3 +29,7 @@
 Host 写入可能早于 Guest 刷新。插件仅核对受影响的已打开文档，内容未匹配或缓冲区变脏时保留并报错；不全局回退。skill 请求用户协助处理持续冲突和其他未支持步骤，等待确认后再继续依赖工作。
 
 大文件下载在实际终端测试中多次停顿，本版以 `feature_unavailable` 禁用，不允许循环小块读取绕过。小文件字节读和大文件上传仍可用。输出节流只通过本地测试，不能视为下载问题已修复。见[验收记录](VALIDATION-v0.2.zh-CN.md)。
+
+`pipe-security.cs` / `pipe-host.ps1`: 明确 owner／沙箱 DACL、本机与会话门禁、持久单实例管道、有界 UTF-8 输入及响应排空。
+
+`local-accounts.cs` 只枚举本机 SAM 用户并按稳定 SID 选择；`ipc-access.cjs` 负责仅 User 的模式解析、一次旧 SID 迁移和英文账号选择器。

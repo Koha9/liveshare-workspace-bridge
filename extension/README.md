@@ -2,7 +2,9 @@
 
 **English** | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
-Read/edit/save shared documents through current-user Windows IPC. Optional verified Host RW PowerShell adds complete saved-file search, bounded commands, checked text patches, byte-preserving copies and chunked transfers. No HTTP endpoint or token copying.
+v0.2.2: **Configure IPC Access** provides ownerOnly (default), allLocalUsers and selectedUsers with stable local SIDs. Legacy true migrates only to the existing selected accounts, never all users. See [IPC access modes](../docs/IPC-SECURITY.md). Host permissions remain independent.
+
+Read/edit/save shared documents through local Windows IPC (owner-only by default). Optional verified Host RW PowerShell adds complete saved-file search, bounded commands, checked text patches, byte-preserving copies and chunked transfers. No HTTP endpoint or token copying.
 
 Open **Live Share Workspace Bridge: Configure Agent Permissions**. English User settings provide a master agent switch, operation permissions and a linked terminal switch (default off). The status bar shows effective access mode. Missing Host terminals cause the skill to ask the user once and wait; ordinary Guest terminals are never substitutes.
 

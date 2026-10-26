@@ -2,6 +2,8 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | **日本語**
 
+v0.2.2：**Configure IPC Access** は ownerOnly（既定）、allLocalUsers、安定 SID の selectedUsers を提供します。旧 true は既存の選択アカウントだけへ移行し、全員を自動許可しません。[IPC モード](docs/IPC-SECURITY.ja.md)を参照してください。Host 権限は独立です。
+
 Windows のローカルブリッジを通じて、接続済みの VS Code Live Share ワークスペースを Codex から操作します。v0.2 は文書編集と、任意で有効にする検証済み Host RW PowerShell チャネルを組み合わせます。HTTP ポートや token のコピーは不要です。
 
 ## 機能
@@ -61,7 +63,7 @@ node .\extension\cli.cjs upload --instance '<id>' --epoch '<epoch>' --workspace 
 
 文書 EOL と Host の生バイトは別の保証です。パッチの改行は Host Git 設定に従います。検索は rg の無視規則を使い、VS Code の条件付き除外を完全には再現しません。ディレクトリコピーは新規宛先のみで、途中失敗があり得ます。既存宛先のマージや再帰置換は行いません。
 
-名前付きパイプは現在の Windows ユーザー専用です。操作権限は任意の Host コードに対する OS サンドボックスではありません。Host 子プロセスは Windows Job Object を使い、タイムアウト／キャンセルは共有 PowerShell と分離した所有プロセスツリーを対象にします。アップロードの一時資源にはアイドル期限と整合性確認があります。
+名前付きパイプは既定で現在の Windows ユーザー専用です。明示的なローカルアカウント許可の範囲は前述の IPC 文書を参照してください。操作権限は任意の Host コードに対する OS サンドボックスではありません。Host 子プロセスは Windows Job Object を使い、タイムアウト／キャンセルは共有 PowerShell と分離した所有プロセスツリーを対象にします。アップロードの一時資源にはアイドル期限と整合性確認があります。
 
 約 1.1 MB の実ダウンロードが繰り返し共有端末を停止させ、原因は未解決です。`transferOpenRead/transferRead`（CLI download を含む）は Host 送信前に `feature_unavailable` を返します。小分け読み取りの反復で迂回せず、アクセス可能なコピーをユーザーに依頼します。[検証記録](docs/VALIDATION-v0.2.ja.md)を参照してください。
 

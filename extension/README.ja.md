@@ -2,7 +2,9 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | **日本語**
 
-現在ユーザー専用の Windows IPC で共有文書を読み取り、編集、保存します。任意の検証済み Host RW PowerShell は保存済みファイル検索、上限付きコマンド、検証済みテキストパッチ、バイト保持コピー、分割アップロードを追加します。HTTP ポートや token コピーは不要です。
+v0.2.2：**Configure IPC Access** は ownerOnly（既定）、allLocalUsers、安定 SID の selectedUsers を提供します。旧 true は既存の選択アカウントだけへ移行し、全員を自動許可しません。[IPC モード](../docs/IPC-SECURITY.ja.md)を参照してください。Host 権限は独立です。
+
+既定で現在ユーザー専用の Windows IPC で共有文書を読み取り、編集、保存します。任意の検証済み Host RW PowerShell は保存済みファイル検索、上限付きコマンド、検証済みテキストパッチ、バイト保持コピー、分割アップロードを追加します。HTTP ポートや token コピーは不要です。
 
 **Live Share Workspace Bridge: Configure Agent Permissions** を開きます。英語の User 設定に agent 全体、操作別、連動する端末スイッチ（既定無効）があります。状態表示の Host allowed は接続検証済みを意味しません。Host 端末がなければ skill は一度ユーザーへ依頼して待ち、通常の Guest 端末で代替しません。
 
