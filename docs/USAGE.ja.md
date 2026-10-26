@@ -1,61 +1,41 @@
-# 使い方
+# 使用方法 v0.2
 
 [English](USAGE.md) | [简体中文](USAGE.zh-CN.md) | [繁體中文](USAGE.zh-TW.md) | **日本語**
 
 [ドキュメント](README.ja.md)
 
-## インストール
+1. 接続済み Guest ウィンドウの Profile に VSIX と対応する skill をインストールします。
+2. 一度検出して対象ルートを選び、以後 `instance`、`epoch`、完全な `workspace` URI を固定します。
+3. **Live Share Workspace Bridge: Configure Agent Permissions** を開きます。agent は既定で有効、端末は無効です。英語の操作スイッチをユーザーが調整します。
+4. Host 機能には、Host で読み書き可能として共有した Windows PowerShell に Guest から接続します。複数端末がある場合は正確な名前を指定します。Host ルートは明示設定でき、パスは推測しません。
+5. 許可されたタスクで `hostStatus/hostBind` を使います。端末がない場合は一度依頼して待ち、通常の Guest 端末や設定変更で迂回しません。
 
-確認済みの Python 3 実行ファイルでパッケージをビルドします。
+## テキスト編集
 
-```powershell
-$pythonExe = '<path-to-python.exe>'
-& $pythonExe .\scripts\build.py
-```
+`read/readMany` のバージョンを保持し、関連変更を一つの `edit` にまとめます。`applied/saved` と各対象の dirty 状態を確認し、成功後は余分な全文検証なしで続行します。新規は `create`、全置換は保護付き `write`、保存失敗の再試行は編集を再適用せず `save` を使います。
 
-Live Share Guest ウィンドウが使用する Profile に `dist/` 内の VSIX をインストールし、`skills/liveshare-workspace-bridge/` を Codex の skills ディレクトリへコピーします。案内に従って VS Code を再読み込みし、Guest ウィンドウを共有プロジェクトへ接続してください。
+未保存バッファーは保護されます。`allowDirty:true` は既存の変更を保持して保存する意図を含めます。文書 EOL は Guest 状態であり、Host 生バイトの保証とは別です。
 
-## ワークスペースの選択
+## 検索、コマンド、パッチ
 
-```powershell
-node .\extension\cli.cjs instances
-```
+`search/findFiles` は Host rg を使い、完全性、上限、終了コードを返します。無一致の終了コード 1 は正常です。保存済みファイルが対象で、dirty バッファーを含めず `saveAll` もしません。エディタースナップショットは明示的な不完全 API です。
 
-`roots[].name` と完全な `roots[].uri` が目的のプロジェクトと一致する項目を選び、`id`、`epoch`、ルート URI を保持します。複数のウィンドウがある場合は明示的に選択し、エディターのフォーカスをウィンドウの識別に使わないでください。
+`hostExec` は出力に上限のあるジョブを返します。有用な `waitMs` と出力カーソルでポーリングし、ビジーループやコマンド再送を避けます。キャンセルは所有ツリーのみです。実際の終了コードを報告します。raw コマンドには全操作権限が必要で、制限時はタスクに適した許可済みの個別 API を使います。既知のファイル変更には `affectedPaths` を指定し、その他の任意の副作用は追跡されません。
 
-```powershell
-node .\extension\cli.cjs --instance '<id>' --epoch '<epoch>' `
-    --workspace 'vsls:/' --request '<request.json>'
-```
+`applyPatch` はパスと Host Git の事前検証を経て適用します。`checkOnly:true` は確認のみです。改行は Host Git 設定に従い、stage/commit/push を暗黙に実行しません。
 
-CLI は stdin からの JSON オブジェクトも受け付けます。利用可能なローカルディレクトリから起動してください。`vsls:` URI はローカルファイルシステムのパスではありません。
+## バイトと大きなファイル
 
-## 読み取りと編集
+小容量データは `readBytes/writeBytes` を使います。コピーは任意のバイナリーを保持できない Live Share テキストプロバイダーではなく Host で実行します。ディレクトリコピーは新規宛先のみです。大きなファイルは CLI `upload` を使い、ファイル全体を一つの JSON に入れません。SHA-256 を検証し、上書きには現在の生バイトハッシュが必要です。
 
-必要な行には `read`、複数ファイルには `readMany` を使用します。現在のバッファーの内容とドキュメントの `version` が返るため、後続の編集で再利用できます。
+大容量ダウンロードは本版では無効で、`transferOpenRead/transferRead` は `feature_unavailable` を返します。約 1.1 MB の実転送で端末停止が発生しました。小分け読み取りの反復で迂回しません。小容量読み取りと大容量アップロードは利用できます。
 
-```json
-{"op":"edit","files":[{"path":"src/main.ts","expectedVersion":4,"changes":[{"oldText":"return oldValue;","newText":"return newValue;"}]}]}
-```
+## エラー、制御、ユーザーへの依頼
 
-`oldText` は原則として一意に一致する必要があります。すべての一致箇所を置換するときだけ `all:true` を指定します。関連する複数ファイルの変更は、1 回の `edit` にまとめてください。新規テキストファイルには `create`、既存ファイルの全置換にはガード付きの `write` を使用します。
+全体／端末スイッチは後続リクエストに即時適用されますが、送信済み作業を取り消しません。agent は拒否を報告し、自分で権限を有効にしません。結果不明の送信済み変更は状態を確認し、盲目的に再送しません。
 
-新規ファイルは内容から LF または CRLF を推定し、`eol` で明示することもできます。既存ドキュメントの改行形式は維持されます。作成、コピー、移動では不足する親ディレクトリを既定で作成します。以前の結果で親の存在が分かっている場合は `parents:false` を指定できます。
+Host 書き込みが Guest モデル更新より先行することがあります。影響する開いたバッファーだけを正規化 Host ハッシュと照合し、全体 revert は行いません。`editor_refresh_pending/external_change_dirty_document` では内容を保持し、必要ならユーザーに競合解決や安全な再オープンを依頼します。
 
-## 保存結果の確認
+再帰削除と複数ファイルの原子的保存は未対応です。skill は未解決の手順ごとに一度、正確なパスと必要な結果を示して依頼し、返答まで依存作業を保留します。ダウンロードはアクセス可能なコピー、削除はユーザーによる削除確認、原子的保存は適切な Host ツールまたはファイル単位の保存への明示的同意が必要です。プロバイダー不足や継続するバッファー競合も依頼対象です。raw コマンドによる迂回はせず、独立した対応済み作業は続行できます。
 
-`applied`、`saved`、ファイルごとの `dirty` を確認します。正常終了後の再読み取りや Host 側での手動確認は不要です。変更が適用済みでも保存に失敗した場合はバッファーを保持し、返されたバージョンを指定して `save` を再試行します。変更全体を再適用しないでください。
-
-既存の未保存ドキュメントは既定で保護されます。その未保存内容も含めて保存する場合に限り、`allowDirty:true` を指定してください。
-
-## 検索とナビゲーション
-
-`search` は VS Code の Search View を使用してスナップショットを返します。`searchResults` は検索を再実行せず現在のビューを読み取ります。いずれも検索完了を保証しません。`findFiles` は新規ファイルを見落とす場合があるため、正確なパスが分かる場合は検索結果への掲載を前提とせず、そのパスを直接読み取ってください。
-
-言語に対応したナビゲーションには `symbols`、`workspaceSymbols`、`definition` を使用します。結果はプロジェクトで利用できる言語プロバイダーに依存します。
-
-## 接続の管理
-
-サービスは VS Code ウィンドウのライフサイクルに従います。必要に応じてコマンドパレットから `Live Share Workspace Bridge: Restart Connection` または `Live Share Workspace Bridge: Stop Connection` を実行してください。
-
-新しいウィンドウや再読み込みではインスタンス ID が変わり、ワークスペースの変更では epoch が更新されます。`instance_mismatch`、`workspace_changed`、インスタンス利用不可のエラーが出た場合は、再検出してプロジェクトを確認してください。
+[API](API.ja.md)、[トラブルシューティング](TROUBLESHOOTING.ja.md)、[検証記録](VALIDATION-v0.2.ja.md)を参照してください。

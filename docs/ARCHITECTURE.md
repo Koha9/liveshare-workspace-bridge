@@ -1,44 +1,19 @@
-# Architecture
+# Architecture v0.2
 
 **English** | [简体中文](ARCHITECTURE.zh-CN.md) | [繁體中文](ARCHITECTURE.zh-TW.md) | [日本語](ARCHITECTURE.ja.md)
 
 [Documentation](README.md)
 
-## Request path
+- extension.cjs owns current-user IPC, lifecycle and English permission status.
+- permissions.cjs is the request authorization layer; it reads live User/machine settings before dispatch and Host send. Agent endpoints cannot update permissions.
+- workspace.cjs owns document versions, dirty-buffer checks, text preflight, language edits and targeted saves. Host mutations keep affected model guards until normalized content matches.
+- host-channel.cjs serializes shared-terminal actions, verifies a random bootstrap file, binds the Host root and frames responses with nonces and explicit end markers. Large payloads use an acknowledged no-echo console input path.
+- host-operations.cjs maps public APIs to narrow Host actions and binds jobs/transfers to root and epoch.
+- host-actions.ps1 loads an in-memory Host helper. host-runtime.cs provides owned Windows Job Objects, bounded stream draining, chunked byte handles, SHA-256 and expiry. No permanent Host agent or HTTP service is installed.
+- cli.cjs is canonical and copied into the skill at build time; it supports JSON, patches and chunked uploads. Its retained download entry point is denied by the server capability gate in this release.
 
-```text
-Codex skill or CLI
-    → current-user Windows named pipe
-    → PowerShell transport process
-    → VS Code extension APIs
-    → Live Share file provider
-```
+The document path remains the default for text edits, without provider rereads after every save. The optional Host path handles complete saved-file search, commands, patches and byte/directory operations. Raw Host execution requires all operation permissions; narrow actions remain individually controllable. These checks are not an OS sandbox for arbitrary scripts.
 
-## Components
+Dispatched work is not rolled back on revocation. Child tasks retain a bounded timeout; synchronous filesystem actions may still complete after a Guest response timeout. Unknown outcomes are not retried. Transfers have idle expiry and owned temporary staging; directory copy can partially fail. No recursive delete or multi-file disk transaction is exposed.
 
-| Component | Responsibility |
-|---|---|
-| `extension/extension.cjs` | Activation, transport lifecycle, instance discovery, and workspace epochs |
-| `extension/pipe-host.ps1` | Current-user pipe permissions and JSON frame forwarding |
-| `extension/workspace.cjs` | Fixed file, document, search, and language operations |
-| `extension/core.cjs` | Path validation, content guards, EOL handling, and edit planning |
-| `extension/cli.cjs` | Discovery, request transport, and CLI exit status |
-| `skills/liveshare-workspace-bridge/` | Codex instructions and a self-contained client |
-
-## Workspace binding
-
-Each VS Code window has an instance ID. Workspace changes update an epoch. Requests bind the selected instance and epoch to an exact root URI. This prevents a stale selection from silently following a different workspace that also uses `vsls:/`.
-
-Discovery records contain connection metadata under `~/.liveshare-local/instances/`; they are not access tokens. The extension starts the pipe helper without a visible console and stops it with the owning process.
-
-## Document operations
-
-Shared URIs retain their `vsls:` scheme. Reads use current editor buffers. Batch text edits are preflighted together, submitted as one WorkspaceEdit, and saved per document. Saving several files is not an atomic disk transaction.
-
-Normal operations reuse document versions and save results. Provider rereads and text hashes are explicit, not automatic confirmation steps. A transport failure after sending a request leaves its outcome unknown and does not trigger replay.
-
-## Access boundary
-
-Windows PowerShell uses an explicit current-user pipe ACL; PowerShell 7 can use `CurrentUserOnly`. The bridge exposes a fixed operation set, not arbitrary shell or VS Code command execution. Other programs running as the same Windows user can access the interface.
-
-Node filesystem APIs handle local request files and discovery records only. Virtual resources are resolved through VS Code and Live Share. The bridge does not provide a Host execution environment.
+Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable` before sending Host commands in v0.2. A 1.1 MB live download repeatedly stalled the shared terminal; it is deferred pending a reliable output transport. Do not bypass this by looping small byte reads. Small bounded byte reads and large uploads remain available.

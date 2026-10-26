@@ -16,11 +16,11 @@ EXTENSION = ROOT / "extension"
 SKILL_NAME = "liveshare-workspace-bridge"
 SKILL = ROOT / "skills" / SKILL_NAME
 DIST = ROOT / "dist"
-RUNTIME_FILES = ("extension.cjs", "workspace.cjs", "core.cjs", "cli.cjs", "pipe-host.ps1")
-DOCUMENT_NAMES = ("README", "USAGE", "API", "ARCHITECTURE", "DEVELOPMENT", "TROUBLESHOOTING")
+RUNTIME_FILES = ("extension.cjs", "workspace.cjs", "core.cjs", "cli.cjs", "pipe-host.ps1", "permissions.cjs", "host-channel.cjs", "host-operations.cjs", "patch.cjs", "host-runtime.cs", "host-actions.ps1")
+DOCUMENT_NAMES = ("README", "USAGE", "API", "ARCHITECTURE", "DEVELOPMENT", "TROUBLESHOOTING", "VALIDATION-v0.2")
 LOCALES = ("", ".zh-CN", ".zh-TW", ".ja")
 SKILL_FILES = (
-    "SKILL.md", "agents/openai.yaml", "references/api.md",
+    "SKILL.md", "agents/openai.yaml", "references/api.md", "references/recovery.md",
     "scripts/liveshare.cjs",
 )
 
@@ -107,7 +107,7 @@ def package_members(package: dict) -> dict[str, dict[str, bytes]]:
     content_types = '''<?xml version="1.0" encoding="utf-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
  <Default Extension="json" ContentType="application/json"/><Default Extension="cjs" ContentType="application/javascript"/>
- <Default Extension="ps1" ContentType="text/plain"/><Default Extension="md" ContentType="text/markdown"/>
+ <Default Extension="ps1" ContentType="text/plain"/><Default Extension="cs" ContentType="text/plain"/><Default Extension="md" ContentType="text/markdown"/>
  <Default Extension="txt" ContentType="text/plain"/>
  <Default Extension="png" ContentType="image/png"/>
  <Default Extension="vsixmanifest" ContentType="text/xml"/>

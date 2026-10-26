@@ -1,22 +1,11 @@
-# Live Share Workspace Bridge
+# Live Share Workspace Bridge v0.2
 
 **English** | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
-Use Codex or the bundled CLI to read, edit, and save files in a connected Live Share Guest workspace through a Windows named pipe.
+Read/edit/save shared documents through current-user Windows IPC. Optional verified Host RW PowerShell adds complete saved-file search, bounded commands, checked text patches, byte-preserving copies and chunked transfers. No HTTP endpoint or token copying.
 
-- No HTTP listener, token copying, npm runtime dependencies, or Host-side installation.
-- Supports buffered reads, multi-file edits, target-document saves, file operations, diagnostics, and language queries.
-- Native content search returns a snapshot; file-name search can omit new files.
+Open **Live Share Workspace Bridge: Configure Agent Permissions**. English User settings provide a master agent switch, operation permissions and a linked terminal switch (default off). The status bar shows effective access mode. Missing Host terminals cause the skill to ask the user once and wait; ordinary Guest terminals are never substitutes.
 
-Install in the Profile used by the Guest window. Follow VS Code's reload prompt when updating.
+Recursive deletion and cross-file save transactions remain unavailable. Search covers saved Host files. Text document EOL is not independent Host byte fidelity. See [usage](../docs/USAGE.md), [API](../docs/API.md) and [development](../docs/DEVELOPMENT.md).
 
-Commands:
-
-- `Live Share Workspace Bridge: Restart Connection`
-- `Live Share Workspace Bridge: Stop Connection`
-
-See the [usage guide](../docs/USAGE.md), [API reference](../docs/API.md), and [troubleshooting guide](../docs/TROUBLESHOOTING.md).
-
-The pipe is available to programs running as the same Windows user. It does not provide a Host shell or isolate same-user programs.
-
-Licensed under the MIT License. See [LICENSE](../LICENSE).
+Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable` before sending Host commands in v0.2. A 1.1 MB live download repeatedly stalled the shared terminal; it is deferred pending a reliable output transport. Do not bypass this by looping small byte reads. Small bounded byte reads and large uploads remain available.

@@ -1,27 +1,33 @@
-# Troubleshooting
+# Troubleshooting v0.2
 
 **English** | [简体中文](TROUBLESHOOTING.zh-CN.md) | [繁體中文](TROUBLESHOOTING.zh-TW.md) | [日本語](TROUBLESHOOTING.ja.md)
 
-[Documentation](README.md)
+[Documentation](README.md) | [API](API.md)
 
-## No instance or no shared root
+## Connection and permissions
 
-Install the extension in the Profile used by the Live Share Guest window. Reload that window after an update, connect to the intended session, and run the CLI `instances` command. A local VS Code window can have an instance with an empty `roots` list. Select the connected Guest entry by its project name and complete `vsls:` URI. Use **Live Share Workspace Bridge: Restart Connection** if its connection was stopped. The Output channel with the same name reports pipe startup errors.
+Install the extension in the Live Share Guest window's Profile. After an update reload that window, reconnect to the intended session, and run CLI instances. Choose the project by root name and complete vsls URI, then retain instance/epoch/workspace. A binding error after reload requires rediscovery. The extension Output channel reports pipe startup errors.
 
-When migrating from an earlier local package, uninstall `ucuni-local.liveshare-workspace-tools` or `Koha9-Lee.liveshare-workspace-tools`, then install `Koha9-Lee.liveshare-workspace-bridge` and reload each affected window. VS Code treats the renamed extension as a separate installation; do not keep both running. If you configured a PowerShell override, transfer it to `liveshareWorkspaceBridge.powershell`.
+Open **Live Share Workspace Bridge: Configure Agent Permissions**. Agent access defaults on; shared terminal access defaults off. Inspect configured and effective permissions. The user controls these settings; agents must not enable them to bypass a denial. Permission changes block new work, without undoing dispatched effects.
 
-## Binding, editing, and saving
+## Missing or unresponsive Host terminal
 
-A reload changes the instance ID; a workspace change updates its epoch. Rediscover the intended project after a binding error. For `content_changed`, read only the affected text and revise the edit with its current version. Dirty documents are protected; include their unsaved changes only when explicitly intended.
+Host features require one connected shared Windows PowerShell terminal with read/write access. Ordinary Guest terminals are excluded. If absent, the skill asks the user once for Host setup and waits. Multiple candidates need the exact configured name. No repeated prompts, guessed terminals, or alternate execution routes.
 
-An applied edit can still fail to save. Inspect each file's save result and dirty state; retry only `save` with the returned version. A transport failure with `requestSent:true` leaves the outcome unknown. Inspect the affected target before any further mutation; never blindly replay the edit.
+Binding verifies the shared root using an owned temporary bootstrap file. A sent request that times out quarantines the channel; do not replay mutations. Preserve the receipt, inspect affected targets, and wait until the user confirms the terminal is idle or restarted before explicit acknowledgeRecovery binding. Timeout details contain counters, not captured file contents.
 
-## Search and language results
+Large downloads are disabled in this release after real shared-terminal stalls. Do not simulate them with repeated byte reads. Large uploads and bounded byte APIs passed live validation. Output pacing is included, but has not been validated as a fix for sustained large downloads.
 
-Content search returns a Search View snapshot with `complete:null`; it has no completion signal. File-name search can omit newly created files. An empty result does not prove absence. Read a known path directly. Language queries depend on the project's language providers; empty diagnostics do not establish that a build or test passed.
+## Editing and Host changes
 
-## Text, bytes, and size limits
+Use current document versions for guarded edits. Dirty buffers are protected; include them only when preserving/saving their content is in scope. After an applied edit with a failed target save, retry save with its returned version instead of reapplying text. Batch saves are per-file, not transactional.
 
-Document edits preserve the Guest buffer's line-ending style. Live Share may normalize line endings when saving on the Host, so Guest text or `providerRead` is not proof of exact Host bytes, encoding, or line endings. This version does not offer general binary writes, directory copying, recursive deletion, or a Host shell.
+Host writes can leave an existing Guest buffer stale or dirty. editor_refresh_pending/external_change_dirty_document preserve it instead of globally reverting user editors. Resolve the affected buffer with the user or reopen it safely; an explicit hostStat withTextHash refreshes the expected normalized digest, not the editor itself. Guest text/EOL is distinct from Host raw bytes. Host Git configuration can convert patch output to CRLF.
 
-For `response_limit`, request fewer lines or files. A partial response does not mean the underlying provider reads the file as a stream. See the [API limits](API.md) and [usage guide](USAGE.md).
+## Search and language tools
+
+Host rg searches saved files; complete is false on limits/failures, and no-match exit 1 is normal. Dirty buffers are listed separately and never auto-saved. Snapshot queries remain explicitly incomplete. Language operations need providers; unavailable providers are errors, and empty diagnostics do not prove a build or test passed.
+
+## File operations and limits
+
+Byte overwrite needs the current raw Host SHA-256. Directory copy requires a new destination and can partially fail. Recursive deletion and cross-file atomic saves are not implemented. For response_limit, request relevant ranges/fewer results. Provider partial text responses do not establish streaming reads.

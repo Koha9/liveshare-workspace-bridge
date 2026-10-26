@@ -14,7 +14,7 @@ test('extension starts before joining, refreshes workspace epoch, restarts and r
   const vscode = {
     Uri,
     window: { createOutputChannel: name => { assert.equal(name, manifest.displayName); return { append() {}, appendLine() {}, dispose() {} }; } },
-    workspace: { workspaceFolders: [], textDocuments: [], isTrusted: true, getConfiguration: section => ({ get: key => { assert.ok(Object.hasOwn(manifest.contributes.configuration.properties, `${section}.${key}`)); assert.equal(section, 'liveshareWorkspaceBridge'); return ''; } }), onDidChangeWorkspaceFolders: callback => { changeFolders = callback; return { dispose() {} }; } },
+    workspace: { workspaceFolders: [], textDocuments: [], isTrusted: true, getConfiguration: section => ({ get: key => { assert.ok(Object.hasOwn(manifest.contributes.configuration.properties, `${section}.${key}`)); assert.equal(section, 'liveshareWorkspaceBridge'); return key === 'powershell' ? '' : undefined; } }), onDidChangeWorkspaceFolders: callback => { changeFolders = callback; return { dispose() {} }; } },
     commands: { registerCommand: (name, callback) => { assert.equal(commands.has(name), false); commands.set(name, callback); return { dispose() { commands.delete(name); } }; } }
   };
   const loader = Module._load;

@@ -1,44 +1,29 @@
-# 架构
+# 架构 v0.2
 
 [English](ARCHITECTURE.md) | **简体中文** | [繁體中文](ARCHITECTURE.zh-TW.md) | [日本語](ARCHITECTURE.ja.md)
 
 [文档](README.zh-CN.md)
 
-## 请求链路
+## 模块职责
 
-```text
-Codex skill or CLI
-    → current-user Windows named pipe
-    → PowerShell transport process
-    → VS Code extension APIs
-    → Live Share file provider
-```
+- `extension.cjs`：当前用户 IPC、生命周期和英文权限状态栏。
+- `permissions.cjs`：请求授权层，在派发和 Host 发送前读取实时 User/machine 设置；agent 接口不能更改权限。
+- `workspace.cjs`：文档版本、dirty 保护、文本预检、语言编辑和目标保存。Host 修改后保留模型保护，直到规范化内容匹配。
+- `host-channel.cjs`：串行共享终端请求，以随机 bootstrap 文件核对根目录，通过 nonce 和显式结束标记封装响应；大输入在收到准备确认后走不回显控制台路径。
+- `host-operations.cjs`：公开 API 到窄 Host 操作的映射，将任务／传输绑定到 root 和 epoch。
+- `host-actions.ps1`：加载内存中的 Host 会话辅助程序；`host-runtime.cs` 提供 Windows Job Object、有界输出排空、分块字节句柄、SHA-256 和空闲过期。不安装常驻 Host agent 或 HTTP 服务。
+- `cli.cjs`：唯一规范客户端，构建时复制到 skill；支持 JSON、文本补丁和分块上传。保留的下载入口由本版服务端能力门禁拒绝。
 
-## 组件
+## 文档路径与 Host 路径
 
-| 组件 | 职责 |
-|---|---|
-| `extension/extension.cjs` | 激活、通信生命周期、实例发现和工作区 epoch |
-| `extension/pipe-host.ps1` | 当前用户的管道权限及 JSON 帧转发 |
-| `extension/workspace.cjs` | 固定的文件、文档、搜索和语言操作 |
-| `extension/core.cjs` | 路径校验、内容保护、换行处理和编辑规划 |
-| `extension/cli.cjs` | 发现、请求传输和 CLI 退出状态 |
-| `skills/liveshare-workspace-bridge/` | Codex 使用说明及独立客户端 |
+文本编辑默认使用文档 API，成功保存后不重复读取提供者。可选 Host 通道负责已保存文件搜索、命令、补丁、字节和目录操作。原始 Host 执行需要全部操作权限；窄接口分别授权。这不是任意脚本的操作系统沙箱。
 
-## 工作区绑定
+共享 URI 保留 `vsls:`，不能交给 Node 本机文件系统。实例、epoch 和根目录构成绑定，工作区改变时旧任务资源不能用于新项目。客户端不自动重放已发送但结果未知的修改。
 
-每个 VS Code 窗口都有实例 ID，工作区变化会更新 epoch。请求将所选实例与 epoch 绑定到准确的根 URI，避免旧选择悄然指向另一个同样使用 `vsls:/` 的项目。
+## 撤销、故障与限制
 
-发现记录位于 `~/.liveshare-local/instances/`，只保存连接元信息，不是访问令牌。扩展隐藏启动管道辅助进程，该进程随拥有者退出而结束。
+撤销权限阻止新工作，不回滚已派发工作。子任务保留超时；同步文件系统操作可能在 Guest 响应超时后仍完成。传输临时资源有空闲过期；目录复制可能部分失败。没有递归删除或跨文件落盘事务。
 
-## 文档操作
+Host 写入可能早于 Guest 刷新。插件仅核对受影响的已打开文档，内容未匹配或缓冲区变脏时保留并报错；不全局回退。skill 请求用户协助处理持续冲突和其他未支持步骤，等待确认后再继续依赖工作。
 
-共享 URI 保留 `vsls:` scheme。读取使用当前编辑器缓冲区。批量文本修改统一预检后，以一份 WorkspaceEdit 提交，再逐文档保存；多文件保存不是原子的磁盘事务。
-
-日常操作复用文档版本和保存回执。提供者回读和文本哈希只在明确要求时使用。请求发出后传输失败会保留为结果未知，不自动重放。
-
-## 访问边界
-
-Windows PowerShell 使用显式的当前用户管道 ACL，PowerShell 7 可使用 `CurrentUserOnly`。桥接只开放固定操作，不执行任意 shell 或 VS Code 命令。以同一 Windows 用户运行的其他程序也可访问该接口。
-
-Node 文件系统 API 只处理本机请求文件和发现记录；虚拟资源经 VS Code 和 Live Share 解析。桥接不提供 Host 执行环境。
+大文件下载在实际终端测试中多次停顿，本版以 `feature_unavailable` 禁用，不允许循环小块读取绕过。小文件字节读和大文件上传仍可用。输出节流只通过本地测试，不能视为下载问题已修复。见[验收记录](VALIDATION-v0.2.zh-CN.md)。

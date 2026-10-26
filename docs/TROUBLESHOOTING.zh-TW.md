@@ -1,27 +1,35 @@
-# 疑難排解
+# 故障排查 v0.2
 
 [English](TROUBLESHOOTING.md) | [简体中文](TROUBLESHOOTING.zh-CN.md) | **繁體中文** | [日本語](TROUBLESHOOTING.ja.md)
 
 [文件](README.zh-TW.md)
 
-## 沒有執行個體或共用根目錄
+## 連線與權限
 
-將擴充功能安裝到 Live Share Guest 視窗使用的 Profile，更新後重新載入視窗，連線到目標工作階段，再執行 CLI 的 `instances`。本機 VS Code 視窗可能有執行個體但 `roots` 為空。依專案名稱及完整 `vsls:` URI 選擇 Guest 項目。連線停止時使用 **Live Share Workspace Bridge: Restart Connection**；同名輸出通道會記錄管道啟動錯誤。
+將擴充套件安裝到 Live Share Guest 視窗的 Profile。更新後重新載入視窗、重新連線目標工作階段，再執行 CLI `instances`。按根目錄名稱和完整 `vsls:` URI 選擇專案，沿用 instance/epoch/workspace。重新載入後繫結失效需要重新發現。擴充套件 Output 通道報告具名管道啟動錯誤。
 
-從早期本機套件遷移時，解除安裝 `ucuni-local.liveshare-workspace-tools` 或 `Koha9-Lee.liveshare-workspace-tools`，安裝 `Koha9-Lee.liveshare-workspace-bridge`，並重新載入受影響的視窗。VS Code 將改名後的擴充功能視為獨立安裝，不應同時執行新舊擴充功能。若曾設定 PowerShell 路徑，請將其轉移至 `liveshareWorkspaceBridge.powershell`。
+打開 **Live Share Workspace Bridge: Configure Agent Permissions**。agent 預設開啟，共用終端預設關閉；檢查組態權限和有效權限。開關由使用者控制，agent 不自行啟用來繞過拒絕。更改只阻止新工作，不撤銷已派發副作用。
 
-## 綁定、編輯及儲存
+## Host 終端缺失或無回應
 
-重新載入會改變執行個體 ID，工作區變更會更新 epoch。綁定錯誤後重新探索並選擇專案。遇到 `content_changed`，只重讀受影響文字，依目前版本調整編輯。預設保護 dirty 文件，只有明確希望包含其未儲存變更時才允許編輯。
+Host 功能需要已連線的共用 RW Windows PowerShell，普通 Guest 終端不合格。缺少時 skill 只請求使用者開啟並共用一次，然後等待；多個候選需要準確名稱，不猜測或逐個嘗試，不切換執行路線。使用者確認後驗證一次，仍失敗就報告並等待，不反復提示或輪詢。
 
-編輯已套用仍可能儲存失敗。檢查逐檔儲存結果及 dirty 狀態；需要時僅以回執版本重試 `save`。傳輸失敗且 `requestSent:true` 表示結果未知，應先核對受影響目標，不能盲目重送修改。
+繫結通過自有隨機 bootstrap 臨時檔案驗證根目錄。已發送請求超時後通道隔離，不能重送修改。保留回報紀錄、檢查目標狀態，等待使用者確認終端空閑或已重新啟動，再以 `acknowledgeRecovery:true` 顯式重新繫結。超時診斷只有計數，不包含捕獲的檔案內容。
 
-## 搜尋及語言結果
+實際大檔案下載曾使終端停住，本版已停用；不迴圈位元組讀取模擬。大檔案上傳和有界位元組 API 有實測證據。新增輸出節流尚未證明可修復持續下載。需要下載時請使用者提供可存取副本和本機路徑。
 
-內容搜尋傳回 `complete:null` 的搜尋檢視快照，沒有完成訊號。檔名搜尋可能遺漏新檔案，空結果不能證明不存在；已知路徑可直接讀取。語言查詢依賴專案語言提供者，空診斷不代表建置或測試通過。
+## 編輯與 Host 修改
 
-## 文字、原始位元組及大小限制
+使用當前版本進行受保護編輯，保留既有未儲存內容。已應用但儲存失敗時，用回傳版本只重試 `save`，不重新應用整批文字。批量儲存逐檔案完成，不是事務。
 
-文件編輯保留 Guest 緩衝區的換行樣式。Live Share 可能在 Host 儲存時正規化換行，因此 Guest 文字或 `providerRead` 不能證明 Host 原始位元組、編碼或換行完全一致。本版本不提供通用二進位寫入、目錄複製、遞迴刪除或 Host shell。
+Host 寫入可能留下過期或 dirty 的 Guest 緩衝區。`editor_refresh_pending/external_change_dirty_document` 用於保護內容，不全域還原。請使用者解決衝突或安全重新打開檔案。`hostStat` 的 `withTextHash:true` 只刷新預期規范化摘要，不刷新編輯器。不要儲存已知過期文字。Guest 文字／EOL 與 Host 原始位元組不同；Host Git 可能將補丁結果轉成 CRLF。
 
-遇到 `response_limit`，減少要求的行數或檔案數。局部傳回不代表底層提供者串流讀取檔案。詳見 [API 限制](API.zh-TW.md)及[使用指南](USAGE.zh-TW.md)。
+## 搜尋與語言工具
+
+Host rg 搜尋已儲存檔案；超限或失敗時 complete 為 false，無匹配退出碼 1 正常。dirty 文件單獨報告且不自動儲存。編輯器搜尋快照仍不完整。語言工具需要提供者，缺失時請使用者啟用或協助處理；空診斷不能證明建置或測試通過。
+
+## 檔案與其他限制
+
+位元組覆蓋需要當前 Host 原始 SHA-256。目錄複製只允許新目標，失敗可能留下部分目錄。遞歸刪除請使用者完成並確認；跨檔案原子儲存請使用合適 Host 工具，或由使用者明確接受逐檔案語義。對每個未解決步驟請求一次協助，說明準確路徑和目標結果，等待回覆後再繼續依賴工作；不能靜默跳過或用原始命令繞過。
+
+遇到 `response_limit` 時請求相關範圍或更少結果。提供者的局部文字回應不代表底層流式讀取。參見 [API](API.zh-TW.md) 與[驗收記錄](VALIDATION-v0.2.zh-TW.md)。

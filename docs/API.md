@@ -1,86 +1,115 @@
-# API reference
+# API reference v0.2
 
 **English** | [简体中文](API.zh-CN.md) | [繁體中文](API.zh-TW.md) | [日本語](API.ja.md)
 
 [Documentation](README.md)
 
-## Protocol
 
-Requests are JSON objects. Shared fields `instance`, `epoch`, and `workspace` can be supplied through the corresponding CLI options. Take their values from `instances`; paths are relative to the selected root and use forward slashes.
+Requests use op, instance, epoch and exact workspace URI. CLI flags can supply the binding fields. Shared paths are relative to the selected root. Replies are `{ok:true,result:...}` or `{ok:false,error:{code,message,details?}}`; still inspect applied/saved, per-file results, complete, truncation, state and exit codes.
 
-- Maximum request: 2 MiB.
-- Maximum response: 4 MiB.
-- Maximum text returned by one read: 1 MiB.
+## Permissions and Host binding
 
-Responses use `{"ok":true,"result":...}` or `{"ok":false,"error":{"code":"...","message":"..."}}`. A successful response envelope does not replace checking `applied`, `saved`, and per-file results. The CLI exits nonzero for failed application, failed saves, or partial read errors.
+All settings are English, under `liveshareWorkspaceBridge.*`, with machine scope (User/Remote settings; no workspace override).
 
-## Reads and edits
-
-```json
-{"op":"info"}
-{"op":"list","path":"src"}
-{"op":"read","path":"src/main.ts","startLine":20,"endLine":100}
-{"op":"readMany","files":[{"path":"src/main.ts","startLine":20,"endLine":100},{"path":"package.json"}]}
-{"op":"edit","files":[{"path":"src/main.ts","expectedVersion":4,"changes":[{"oldText":"return oldValue;","newText":"return newValue;"}]}]}
-{"op":"edit","files":[{"path":"src/main.ts","expectedVersion":4,"changes":[{"startLine":20,"endLine":23,"newText":"replacement lines"}]}]}
-{"op":"write","path":"config.json","expectedVersion":2,"text":"{}\n"}
-{"op":"create","path":"src/new/module.ts","text":"export const value = 1;\n","eol":"LF"}
-{"op":"save","path":"src/main.ts","expectedVersion":5}
-```
-
-`read` returns buffer text, `version`, `dirty`, `eol`, and `lineCount`. Line numbers are 1-based and inclusive. Optional `withHash:true` adds a SHA-256 of the current text, not a hash of raw file bytes. Partial output does not imply streaming access to the underlying provider.
-
-`edit.files` accepts up to 100 distinct documents, each with up to 1000 changes. All positions refer to the original document; edits cannot overlap. Literal `oldText` must be nonempty and unique; `all:true` replaces all non-overlapping occurrences.
-
-Line edits select the specified inclusive lines, excluding the final selected line's trailing separator. Optional `expectedText` checks the selected content. Native ranges use `range:{start:{line,character},end:{line,character}}`: lines are 0-based, the end is exclusive, and character offsets use UTF-16. Out-of-range positions are rejected. Position edits require `expectedVersion`, `expectedHash`, or `expectedText`.
-
-`write` replaces an existing document and requires `expectedVersion` or `expectedHash`. Use `create` for a missing file. Creation and editing save their target documents. Existing files retain their EOL; creation infers the first newline, defaults to LF without one, or accepts explicit `LF` / `CRLF`.
-
-`edit` returns `{applied,saved,files:[{uri,version,dirty,saved,changes,error?}]}`. One workspace edit is followed by per-file saves; failures do not trigger rollback or replay. `save` requires the current `expectedVersion`. Use `allowDirty:true` only to explicitly include existing unsaved content.
-
-## File operations
-
-```json
-{"op":"mkdir","path":"new/nested"}
-{"op":"stat","path":"src/main.ts"}
-{"op":"copy","path":"src/main.ts","to":"backup/main.ts"}
-{"op":"move","path":"backup/main.ts","to":"backup/renamed.ts"}
-{"op":"delete","path":"backup/renamed.ts"}
-```
-
-Create, copy, and move create missing parents unless `parents:false`. Copy and move refuse to overwrite unless `overwrite:true`. Copy supports files; move supports files and directories. Delete supports files and empty directories, bypasses the recycle bin, and rejects `recursive:true`. Dirty source or destination documents block these operations.
-
-`mkdir` delegates directly to the provider, including existing-directory behavior. Unknown `stat` sizes or timestamps remain `null`. A failed operation may have created parent directories; file operations are not rollback transactions.
-
-## Search and code navigation
-
-```json
-{"op":"findFiles","pattern":"src/**/*.ts","limit":100}
-{"op":"search","query":"handleRequest","include":"src/**/*.ts","regex":false,"caseSensitive":true,"waitMs":800}
-{"op":"searchResults","searchId":1}
-{"op":"diagnostics","path":"src/main.ts"}
-{"op":"symbols","path":"src/main.ts"}
-{"op":"workspaceSymbols","query":"Handler"}
-{"op":"definition","path":"src/main.ts","line":20,"character":8}
-```
-
-`findFiles` returns up to 1000 results with `possiblyCapped` and `complete:null`. It respects excludes by default; use `exclude` or `useExcludes:false` when appropriate. New files may be omitted.
-
-`search` requires one Live Share root and uses Search View. Options include `include`, `exclude`, `regex`, `caseSensitive`, and `useExcludes` (default true). `waitMs` is 0–5000, default 800; it controls sampling delay, not completion. Results contain `search.id`, `snapshot`, `truncated`, `complete:null`, and `correlation:"best_effort"`. `maxCharacters` defaults to 100000 and is capped at 1000000.
-
-`searchResults` does not launch another search. Optional `searchId` detects another query started through this bridge; manual Search View changes cannot be detected.
-
-`definition` takes a 1-based line and 0-based UTF-16 character offset. Returned locations preserve URI schemes and use native 0-based positions. Empty language results do not indicate a successful build.
-
-`providerRead` returns provider UTF-8 text and byte count for troubleshooting or explicit verification. It is not part of normal successful writes.
-
-## Errors
-
-| Code / result | Meaning |
+| Setting | Meaning |
 |---|---|
-| `instance_mismatch`, `workspace_changed` | Rediscover and confirm the intended workspace. |
-| `content_changed` | Refresh the affected text or version before editing. |
-| `text_not_found`, `ambiguous_match` | Adjust the literal match or its scope. |
-| `dirty_document` | Existing unsaved content is protected. |
-| `saved:false` | Applied text may remain in the editor; retry the save rather than the edit. |
-| `transport_outcome_unknown`, `requestSent:true` | Inspect affected state before retrying a mutation. |
+| agent.enabled | Master access switch; default true. Info/status remain inspectable. |
+| terminal.enabled | Shared Host terminal access; default false. All Host-backed capabilities are effectively disabled while off. |
+| permissions.OPERATION | Individual switches; aliases inherit their base operation. Inspect info.permissions.configured/effective. |
+| terminal.name | Exact shared RW terminal name, or one uniquely eligible shared terminal. Guest terminals are excluded. |
+| terminal.hostWorkspacePath | Optional explicit Host root; otherwise verify the shared PowerShell current directory. |
+| terminal.commandTimeoutMs | 120000 by default, range 1000..3600000. |
+| terminal.maxOutputCharacters | Retained characters per stdout/stderr stream, default 65536, range 1024..262144. |
+| transfer.chunkBytes | Raw bytes/chunk, default 32768, range 1024..65536. |
+| transfer.idleTimeoutMs | Handle/staging idle lifetime, default 120000, range 10000..900000. |
+
+Raw Host commands require every operation permission to be enabled: arbitrary code cannot enforce individual operation restrictions. Document mutations require save permission; parent creation requires mkdir; byte overwrite requires write. These controls authorize operations, not an OS filesystem sandbox.
+
+```json
+{"op":"hostStatus"}
+{"op":"hostBind"}
+```
+
+Status sends no command. Binding verifies an owned temporary Guest bootstrap file, loads a session helper into Host PowerShell and removes the file. It does not install a Host agent or change authentication. Current Host support is Windows PowerShell on Windows. Revoking terminal access stops new requests, not already-dispatched effects.
+
+## Text, files and language
+
+```json
+{"op":"list","path":"src"}
+{"op":"read","path":"src/main.ts","startLine":1,"endLine":80}
+{"op":"readMany","files":[{"path":"a.txt"},{"path":"b.txt","startLine":1,"endLine":40}]}
+{"op":"edit","files":[{"path":"a.txt","expectedVersion":3,"changes":[{"oldText":"old","newText":"new"}]}]}
+{"op":"write","path":"a.txt","expectedVersion":4,"text":"replacement\n"}
+{"op":"create","path":"new/a.txt","text":"hello\n","eol":"LF"}
+{"op":"save","path":"a.txt","expectedVersion":5}
+{"op":"mkdir","path":"new/nested"}
+{"op":"stat","path":"a.txt"}
+{"op":"move","path":"old.txt","to":"new.txt","parents":false}
+{"op":"delete","path":"empty-directory"}
+{"op":"references","path":"src/a.ts","line":12,"character":8}
+{"op":"renameSymbol","path":"src/a.ts","line":12,"character":8,"newName":"newValue","preview":true}
+{"op":"format","path":"src/a.ts","tabSize":2,"insertSpaces":true}
+```
+
+Reads return buffered text/version/dirty/EOL/lineCount. Lines are 1-based and inclusive. withHash:true adds a document text hash, not raw Host bytes. Single text return limit is 1 MiB; opening can still access a complete provider resource.
+
+edit.files allows 100 distinct targets, 1000 changes/file. oldText must be unique unless all:true. All positions reference original content, without overlap. Line edits use startLine/endLine/newText/expectedText?, selecting lines without the last separator. Native range fields use 0-based lines and UTF-16 characters, end-exclusive, with version/hash/expectedText protection. Full write requires expectedVersion or expectedHash.
+
+Text normalizes to Guest document EOL. Host coediting may choose different disk newlines. Saves are target-only and nontransactional; partial failures remain explicit. allowDirty:true includes preserving/saving existing unsaved content.
+
+Existing symbols, workspaceSymbols, definition and diagnostics remain. Language query inputs use 1-based line and 0-based UTF-16 character. Renames/format check scope and dirty buffers and save targets; rename reconstructs text edits only, not provider file operations. preview:true returns a plan without applying. Formatting needs a provider.
+
+Delete rejects recursive:true. Stat is provider metadata with potentially unknown size/provider times; providerRead is explicit UTF-8 verification, not a binary read. Host writes compute normalized text digests only for affected open Guest documents (up to 16 MiB per file), within the same Host response. HostStat withTextHash:true can explicitly refresh that digest after an uncertain mutation. A clean Guest model must match the digest, not merely change version. Host writes may wait for its matching change event; editor_refresh_pending preserves it rather than globally reverting or returning known-stale text.
+
+## Complete saved-file search
+
+```json
+{"op":"search","query":"handleRequest","include":["src/**/*.ts"],"exclude":["**/generated/**"],"caseSensitive":true,"limit":500}
+{"op":"findFiles","pattern":["src/**/*.ts"],"limit":500}
+```
+
+Include/exclude is one glob or an array, not a comma-separated pattern language. regex/wholeWord/caseSensitive default false. useExcludes:false includes hidden/ignored files; .git administration paths remain excluded. Otherwise use rg ignore rules; conditional VS Code excludes are not fully replicated.
+
+Inspect complete, state, exitCode, truncated and scope:saved_host_files. No-match exit 1 is valid. Output/result limits or parse errors make complete false. Limit defaults 500, max 10000. Matches include relative path, 1-based line, text and UTF-8 byte offsets; reread relevant text before constructing UTF-16 edits. Dirty buffers are reported separately, never automatically saved.
+
+Explicit searchSnapshot/searchResults/findFilesSnapshot keep the limited old editor/provider route and unknown completeness; they do not require Host access and are not automatic fallbacks.
+
+## Commands and patches
+
+```json
+{"op":"hostExec","command":"node --test","cwd":"","timeoutMs":120000,"waitMs":1000}
+{"op":"hostJobPoll","jobId":"<id>","waitMs":5000,"stdoutOffset":0,"stderrOffset":0}
+{"op":"hostJobCancel","jobId":"<id>"}
+{"op":"hostJobForget","jobId":"<id>"}
+{"op":"applyPatch","patch":"<Git-style unified text patch>","checkOnly":true}
+```
+
+For commands with known file mutations, supply affectedPaths (up to 100 relative paths). Only affected open buffers are checked against final Host text digests; arbitrary command effects are otherwise untracked.
+
+Commands run in owned child processes with a Windows Job Object. Timeout/cancel targets their tree, never the shared PowerShell. Command length is 1..8000, waitMs 0..5000, timeout 1000..3600000. States: running/completed/timed_out/cancelled. Completed does not imply exit 0. Streams are bounded, drained and marked truncated; reuse returned cursors. Forget only completed jobs. At most 16 retained jobs/binding.
+
+Patches are at most 1 MiB/100 files, use a/ and b/ paths, and cannot escape root, alter .git, or contain binary/symlink/submodule patches. Git apply --check precedes application. checkOnly:true does not apply; dirty targets are rejected. No staging/commit/push. Git must exist on Host. Patch line endings follow Host Git configuration; use byte APIs when raw-byte exactness is required.
+
+## Raw bytes and large transfers
+
+```json
+{"op":"hostStat","path":"asset.bin","withHash":true}
+{"op":"readBytes","path":"asset.bin"}
+{"op":"writeBytes","path":"asset.bin","base64":"<canonical base64>","parents":false}
+{"op":"writeBytes","path":"asset.bin","base64":"<base64>","overwrite":true,"expectedCurrentSha256":"<raw Host hash>"}
+{"op":"copy","path":"assets/a.png","to":"backup/a.png"}
+{"op":"copyDirectory","path":"template","to":"new-template"}
+```
+
+Small byte APIs are bounded by chunkBytes and check SHA-256. Directory copy requires a new destination and rejects reparse points/Git administration trees. Paths and ancestors stay inside verified Host root. Existing byte overwrite needs raw expectedCurrentSha256; text hashes differ. Normal writes do not trigger extra provider verification.
+
+```powershell
+node "<client>" upload --instance "<id>" --epoch "<epoch>" --workspace "vsls:/" --input "<local.bin>" --path "assets/file.bin"
+node "<client>" apply-patch --instance "<id>" --epoch "<epoch>" --workspace "vsls:/" --input "<local.patch>" --check-only
+```
+
+Upload overwrite uses --overwrite and --expected-current-sha256 HASH. The enabled transfer protocol is transferBeginWrite, transferWrite(sequence/base64), transferCommit(sha256), transferAbort. Maximum frame sizes remain 2 MiB request/4 MiB response; uploads use many bounded chunks.
+
+Uploads stage in owned Host temporary files, delete-on-close with idle expiry; destination is updated only at commit. Identical immediately repeated upload sequences are idempotent; ordinary mutations are never automatically replayed. A lost commit reply requires inspecting target state/hash before restarting. Unsupported steps require a concrete user-assistance request and a reply before dependent work, as described in the skill.
+
+Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable` before sending Host commands in v0.2. A 1.1 MB live download repeatedly stalled the shared terminal; it is deferred pending a reliable output transport. Do not bypass this by looping small byte reads. Small bounded byte reads and large uploads remain available.

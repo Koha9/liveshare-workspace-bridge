@@ -2,84 +2,68 @@
 
 **English** | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
-Let Codex work with a VS Code Live Share workspace through a local Windows bridge. Read shared files, edit multiple documents, and save changes through the existing Live Share connection.
+Let Codex work with a connected VS Code Live Share workspace through a local Windows bridge. v0.2 combines target-document editing with an optional verified Host read/write PowerShell channel. No HTTP port or copied token is needed.
 
 ## Features
 
-- Read directories, selected lines, multiple files, and unsaved editor buffers.
-- Apply text replacements, line edits, and changes across multiple documents.
-- Save only the documents you change, with per-file results.
-- Create files and directories, copy files, move or rename paths, and delete files or empty directories.
-- Query diagnostics, document symbols, workspace symbols, and definitions.
-- Use VS Code's native search view and file-name search.
-- Connect through a Windows named pipe restricted to the current user.
+- Buffered text/range reads, batch edits and target-only saves with explicit results.
+- Host ripgrep search and path enumeration with completion, exit codes and truncation flags.
+- Bounded Host commands with stdout/stderr cursors, owned-process timeout and cancellation.
+- Checked Host Git text patches, references, text-only symbol renames and provider formatting.
+- Byte-preserving reads/writes, file copies, new-directory copies and chunked large uploads with SHA-256.
+- English permission settings: master access, individual operations and a linked terminal switch.
 
-## Requirements
+Recursive deletion and cross-file all-or-nothing saves are not provided. Host search covers saved files, not dirty editor buffers. The explicit editor snapshot APIs remain incomplete.
 
-- Windows with VS Code and Live Share.
-- A Live Share Guest window connected to the shared project.
-- Node.js for the CLI and Codex skill.
-- Python 3 for building packages. The build uses only the standard library.
+## Requirements and installation
 
-The extension uses Windows PowerShell, which ships with Windows. No npm dependencies or Host-side installation are required.
+Guest: Windows, VS Code/Live Share and Node.js. Host features: a Windows Host with a shared read/write PowerShell terminal; Git and ripgrep are needed for their respective operations. The bridge can discover ripgrep from a Host VS Code installation. No permanent Host agent installation is required; binding loads an in-memory session helper.
 
-## Getting started
-
-### Build and install the extension
+Build with a confirmed Python 3 executable (standard library only):
 
 ```powershell
 $pythonExe = '<path-to-python.exe>'
 & $pythonExe .\scripts\build.py
-
 $vsix = Get-ChildItem .\dist\liveshare-workspace-bridge-*.vsix |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 code --install-extension $vsix.FullName
 ```
 
-Install in the VS Code Profile used by the Guest window. Add `--profile '<profile-name>'` when needed. Follow VS Code's reload prompt after installation or updates, then reconnect to Live Share if necessary.
+Use the Guest window's Profile, reload when prompted and restore the Live Share connection. Copy `skills/liveshare-workspace-bridge/` to the Codex skills directory after reviewing any existing local customization. Invoke `$liveshare-workspace-bridge`.
 
-### Add the Codex skill
+## Permissions
 
-Copy `skills/liveshare-workspace-bridge/` to your Codex skills directory, such as `$env:USERPROFILE\.codex\skills\liveshare-workspace-bridge`. If the directory already exists, review local changes before replacing it. The ZIP in `dist/` contains the same self-contained skill.
+Run **Live Share Workspace Bridge: Configure Agent Permissions**, or search VS Code Settings for `@ext:Koha9-Lee.liveshare-workspace-bridge`.
 
-Invoke `$liveshare-workspace-bridge` in Codex and describe the task you want to perform in the shared project.
+- **Allow Agent Access** is the master switch (default on).
+- **Allow Shared Host Terminal Access** defaults off. Enabling it permits the Host-backed features, subject to their individual switches.
+- Individual English controls cover reads, edits, saves, file operations, search, language tools, patches, bytes, transfers and Host commands.
+- Turning terminal access off disables every Host-backed operation while retaining configured operation preferences. Guest document features retain their own permissions.
+- Raw Host commands require all operation permissions enabled because arbitrary code could bypass individual file restrictions.
 
-### Use the CLI
+The status bar shows **Agent off**, **Guest only**, or **Host allowed**. Host allowed describes permission, not a verified connection. Changes take effect on requests without restarting. Already-dispatched work is not rolled back; child commands retain their timeout.
+
+If the Host RW terminal is missing, the skill asks the user once to have the Host open/share it, then waits. It does not create a Guest terminal, guess a substitute or silently switch execution routes. Permission denials are reported rather than bypassed by changing settings.
+
+For an unsupported requested step, the skill asks the user to assist with exact paths and the intended result, then waits before continuing dependent work. This covers large downloads, recursive deletion, required atomic saves, missing language providers and unresolved editor conflicts. It does not silently skip the step or bypass the restriction with a raw command.
+
+## CLI
 
 ```powershell
 node .\extension\cli.cjs instances
-
-node .\extension\cli.cjs --instance '<id>' --epoch '<epoch>' `
-    --workspace 'vsls:/' --request '<request.json>'
+node .\extension\cli.cjs --instance '<id>' --epoch '<epoch>' --workspace 'vsls:/' --request '<request.json>'
+node .\extension\cli.cjs upload --instance '<id>' --epoch '<epoch>' --workspace 'vsls:/' --input '<local.bin>' --path 'assets/file.bin'
 ```
 
-Example `request.json`:
+Choose the project once and retain its instance/epoch/root. No extra info pings are sent on pinned requests. Read the [usage guide](docs/USAGE.md) and [API reference](docs/API.md).
 
-```json
-{"op":"read","path":"README.md","startLine":1,"endLine":20}
-```
+## Design and limits
 
-Select the intended window once and reuse its instance ID, epoch, and root URI. Shared paths are relative to that root. See the [usage guide](docs/USAGE.md) and [API reference](docs/API.md).
+Ordinary text edits reuse document versions, apply one related batch and save only targets. Successful saves do not trigger default provider rereads or full-file hashes. Host byte operations avoid the Live Share provider's lossy binary path. Affected open text buffers are checked against targeted Host text digests so a version bump alone cannot expose stale content. No global editor revert is used.
 
-## How it works
+Document EOL is not raw Host byte fidelity. Git patches follow Host Git configuration. Search uses saved files and rg ignore rules, not a full replica of every VS Code conditional exclude. Directory copy can partially fail; it requires a new destination and does not merge/recursively replace an existing one.
 
-```text
-Codex skill / CLI → current-user Windows named pipe
-                 → VS Code APIs → Live Share → shared files
-```
-
-The bridge preserves `vsls:` URIs and edits the current document buffer. Batch edits are checked together, applied in one workspace edit, and saved per document. Successful saves do not trigger automatic provider rereads or full-document hashes.
-
-## Limitations
-
-- Content search returns the current Search View snapshot, without a completion signal. File-name search may omit newly created files.
-- Batch saves are not a cross-file disk transaction. Check each file's result if a save fails.
-- The bridge does not provide a Host shell, remote build or Git execution, recursive deletion, directory copying, binary writes, or general unified-diff parsing.
-- The pipe is a same-user automation interface, not an isolation boundary against other programs running as that Windows user.
-
-## Documentation
-
-Read the [documentation index](docs/README.md) for setup, API details, architecture, development, and troubleshooting.
+The local pipe is restricted to the current Windows user. Operation permissions are not an OS sandbox for arbitrary Host code. Host jobs use owned Windows Job Objects; child process trees are bounded and isolated from the shared PowerShell. Large transfers have idle expiry and explicit integrity checks.
 
 ## Development
 
@@ -90,8 +74,6 @@ npm run check
 & $pythonExe .\scripts\build.py --verify
 ```
 
-Build outputs go to `dist/`. See the [development guide](docs/DEVELOPMENT.md) for the source layout and packaging workflow.
+No npm dependencies are required. Source and skill are maintained together; the build synchronizes the self-contained client. See [development](docs/DEVELOPMENT.md), [architecture](docs/ARCHITECTURE.md) and [documentation](docs/README.md). License: [MIT](LICENSE).
 
-## License
-
-MIT License. See [LICENSE](LICENSE).
+Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable` before sending Host commands in v0.2. A 1.1 MB live download repeatedly stalled the shared terminal; it is deferred pending a reliable output transport. Do not bypass this by looping small byte reads. Small bounded byte reads and large uploads remain available.

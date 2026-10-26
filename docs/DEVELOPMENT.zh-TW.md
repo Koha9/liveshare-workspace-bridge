@@ -1,14 +1,14 @@
-# 開發指南
+# 開發指南 v0.2
 
 [English](DEVELOPMENT.md) | [简体中文](DEVELOPMENT.zh-CN.md) | **繁體中文** | [日本語](DEVELOPMENT.ja.md)
 
 [文件](README.zh-TW.md)
 
-## 環境需求
+## 環境
 
-使用 Windows、Node.js 和已確認的 Python 3 執行檔。擴充功能僅使用 Node 內建模組及 Windows PowerShell，建置僅使用 Python 標準函式庫，不需要安裝相依套件。
+使用 Windows、Node.js 和已確認的 Python 3 可執行檔案。擴充套件使用 Node 內置模塊和 Windows PowerShell；Host 記憶體執行階段由 PowerShell 編譯 C#。建置只使用 Python 標準函式庫，不需要安裝 npm 依賴。
 
-## 原始碼結構
+## 原始碼布局
 
 ```text
 extension/                    Extension, CLI, and tests
@@ -19,9 +19,9 @@ dist/                         Generated packages and SHA-256 files
 .local/                       Local-only working files
 ```
 
-`extension/cli.cjs` 是用戶端的唯一維護原始碼，建置時同步至 skill。介面變更時，應同步 API 參考及各語言譯本。
+`extension/cli.cjs` 是唯一規范客戶端；建置同步到 skill。接口變化必須同步 API 和各語言文件。skill 指令與引用只維護英文，不在 skill 目錄添加語言副本。
 
-## 執行檢查
+## 檢查與建置
 
 ```powershell
 npm test
@@ -31,27 +31,23 @@ $pythonExe = '<path-to-python.exe>'
 & $pythonExe .\scripts\build.py --check
 ```
 
-測試涵蓋編輯預檢、儲存失敗、未儲存緩衝區保護、工作區繫結、IPC 行為與程序清理。一般測試不修改已連線的 Live Share 專案。
-
-## 建置安裝套件
+測試覆蓋編輯預檢、部分儲存失敗、dirty 保護、實時權限依賴、補丁路徑、過期模型保護、真實 Windows IPC、Host 位元組基礎操作、有界輸出、取消和處理程序清理。普通測試不修改已連線的 Live Share 專案。
 
 ```powershell
 & $pythonExe .\scripts\build.py
 & $pythonExe .\scripts\build.py --verify
 ```
 
-建置會在 `dist/` 產生 VSIX、獨立 skill ZIP 和 SHA-256 檔案。`--check` 只檢查目錄、版本和用戶端同步，不寫入檔案；`--verify` 比較既有套件與目前原始碼及校驗值。套件包含多語言使用文件。
+`dist/` 輸出 VSIX、自足式 skill ZIP 和 SHA-256 檔案。`--check` 只檢查布局、版本和客戶端同步；`--verify` 只對比現有包成員、原始碼與校驗和。包包含多語言讀者文件和驗收記錄。
 
-## 共享工作區測試
+## 實際 Live Share 驗證
 
-`extension/test/live-v01.cjs` 需要明確啟用。在已連線且允許測試的工作區中，設定 `LIVESHARE_RUN_LIVE=1` 後再執行。它建立並清理唯一命名目錄，將本機回應記錄寫入 `.local/evidence/`，並會變更 Search View 查詢。請勿將它加入一般 CI。
+`extension/test/live-v01.cjs` 是顯式啟用的舊版集成測試；僅在授權的連線和隔離測試範圍內設定 `LIVESHARE_RUN_LIVE=1` 執行。它創建並清理唯一目錄、將本機回報紀錄儲存到 `.local/evidence/`，還會改變搜尋視圖。不要加入預設測試或 CI。
 
-## 文件
+v0.2 Host 驗證需要專用 RW 共用 PowerShell 和自有唯一測試目錄。臨時設定必須記錄原值並復原，不能覆蓋使用者同時做出的更改。終端權限關閉時所有 Host 功能必須被拒絕，不能退回 Guest 終端。測試不 stage/commit/push。37 項本機測試通過不代表實際大檔案下載通過；分項證據和未完成驗收見[驗收記錄](VALIDATION-v0.2.zh-TW.md)。
 
-英語檔案不帶語言後綴，譯本使用 `.zh-CN`、`.zh-TW` 和 `.ja`。各頁面互相連結，命令、欄位、限制和行為說明應保持一致。
+## 文件與倉庫衛生
 
-## 儲存庫維護
+英文無語言後綴，翻譯使用 `.zh-CN`、`.zh-TW`、`.ja`，對應頁面互鏈。保持命令、API 字段、數值限制、權限預設值和失敗邊界一致；不要翻譯實際設定名稱或 API 標識符。翻譯更新後檢查鏈接與程式碼示例，並重新建置驗證包。
 
-`dist/`、`.local/`、相依套件目錄和本機設定由 Git 忽略。請勿提交存取權杖、本機回應記錄或電腦專用路徑。`.github/workflows/ci.yml` 中的 Windows 工作流程執行檢查與建置，不發佈套件。
-
-skill 的操作指引和參考資料僅維護英語，不在 skill 目錄中加入多語言副本。
+`dist/`、`.local/`、依賴和本機組態不進 Git。不要提交 token、本機回報紀錄、使用者目錄或 Host 原始路徑。`.github/workflows/ci.yml` 在 Windows 上檢查和建置，不發佈。驗收文件只記錄可分享的結果，不包含私有回報紀錄內容。

@@ -1,61 +1,41 @@
-# 使用指南
+# 使用指南 v0.2
 
 [English](USAGE.md) | [简体中文](USAGE.zh-CN.md) | **繁體中文** | [日本語](USAGE.ja.md)
 
 [文件](README.zh-TW.md)
 
-## 安裝
+1. 在已連線 Guest 視窗的 Profile 安裝 VSIX，並安裝匹配的 skill。
+2. 發現一次目標專案，後續固定 `instance`、`epoch` 和完整 `workspace` URI。
+3. 打開 **Live Share Workspace Bridge: Configure Agent Permissions**。agent 預設開啟，終端預設關閉；使用者手動調整英文操作開關。
+4. 使用 Host 功能時，請 Host 共用可讀寫 Windows PowerShell，並在 Guest 連線。多個共用終端需要指定準確名稱。可顯式組態 Host 根目錄，不猜測路徑。
+5. 在授權任務中調用 `hostStatus`／`hostBind`。終端缺失時只請求使用者一次並等待，不使用普通 Guest 終端或繞過設定。
 
-使用已確認的 Python 3 執行檔建置安裝套件：
+## 文字操作
 
-```powershell
-$pythonExe = '<path-to-python.exe>'
-& $pythonExe .\scripts\build.py
-```
+使用 `read`／`readMany` 並保留版本；相關修改合併到一次 `edit`，檢查 `applied`、`saved` 和每個目標的 dirty 狀態。成功後不預設追加全文驗證。`create` 用於新檔案，受保護的 `write` 用於整文件替換；儲存失敗只重試 `save`，不要重新應用編輯。
 
-在 Live Share Guest 視窗使用的 Profile 中安裝 `dist/` 下的 VSIX，將 `skills/liveshare-workspace-bridge/` 複製到 Codex skills 目錄。依提示重新載入 VS Code，並將 Guest 視窗連線到共享專案。
+未儲存緩衝區預設受保護；`allowDirty:true` 必須包含保留並儲存已有編輯的意圖。文件 EOL 反映 Guest 狀態，與 Host 原始位元組是不同保證。
 
-## 選擇工作區
+## 搜尋、命令和補丁
 
-```powershell
-node .\extension\cli.cjs instances
-```
+`search`／`findFiles` 通過 Host rg 搜尋，報告完整性、限制和退出碼；無匹配的退出碼 1 正常。它們只覆蓋已儲存檔案，不覆蓋 dirty 緩衝區，不自動 `saveAll`。編輯器快照是顯式且不完整的獨立接口。
 
-依 `roots[].name` 和完整的 `roots[].uri` 選擇目標專案，記住 `id`、`epoch` 和根 URI。有多個視窗時應明確選擇，不以目前編輯器焦點代替視窗身分。
+`hostExec` 回傳有界輸出的任務。使用有意義的 `waitMs` 和輸出游標輪詢，避免忙迴圈；取消只作用於自有處理程序樹。報告實際退出碼。原始命令要求全部操作權限；受限時只使用符合任務的已允許窄接口，不繞過限制。已知檔案修改應聲明 `affectedPaths`，任意其他副作用不會自動追蹤。
 
-```powershell
-node .\extension\cli.cjs --instance '<id>' --epoch '<epoch>' `
-    --workspace 'vsls:/' --request '<request.json>'
-```
+`applyPatch` 校驗路徑並先執行 Host Git 檢查，`checkOnly:true` 只檢查不應用。補丁行尾受 Host Git 組態影響；不隱含 stage、commit 或 push。
 
-CLI 也接受從 stdin 輸入的 JSON 物件。請從可用的本機目錄啟動；`vsls:` URI 不是本機檔案系統路徑。
+## 位元組和大檔案
 
-## 讀取與編輯
+小數據用 `readBytes`／`writeBytes`。複製由 Host 完成，因為 Live Share 文字提供者不能保證二進位位元組。目錄複製目標必須是新目錄。大檔案用 CLI `upload`，不要將整個檔案塞入一個 JSON 請求。上傳校驗 SHA-256；覆蓋現有檔案需要當前原始位元組雜湊。
 
-使用 `read` 讀取相關行，或透過 `readMany` 讀取多個檔案。讀取會傳回目前緩衝區內容和文件 `version`，後續編輯可沿用該版本。
+大檔案下載本版停用，`transferOpenRead`／`transferRead` 回傳 `feature_unavailable`。約 1.1 MB 的實際下載曾使共用終端停住；不迴圈小塊讀取繞過。小檔案位元組讀取和大檔案上傳仍可用。
 
-```json
-{"op":"edit","files":[{"path":"src/main.ts","expectedVersion":4,"changes":[{"oldText":"return oldValue;","newText":"return newValue;"}]}]}
-```
+## 錯誤、控制與使用者協助
 
-`oldText` 預設必須唯一；只有明確要取代所有符合項目時才設定 `all:true`。相關的多檔修改優先集中到一次 `edit` 請求。新檔案使用 `create`，完整取代既有檔案則使用附帶保護條件的 `write`。
+總開關和終端開關即時約束後續請求，不撤銷已經派發的工作。agent 報告權限拒絕，不自行啟用。結果未知的已發送修改必須先檢查狀態，不能盲目重送。
 
-新檔案從內容推斷 LF 或 CRLF，也可用 `eol` 明確指定。既有文件保留原有換行格式。建立、複製與移動預設建立缺少的父目錄；若先前結果已確認父目錄存在，可傳入 `parents:false`。
+Host 寫入可能早於 Guest 模型刷新。擴充套件只對受影響的已打開緩衝區進行規范化文字雜湊核對，不全域還原編輯器。出現 `editor_refresh_pending` 或 `external_change_dirty_document` 時保留內容，必要時請使用者解決衝突或安全重新打開檔案。
 
-## 檢查儲存結果
+遞歸刪除和跨檔案原子儲存不可用。skill 對每個未解決步驟請求一次使用者協助，說明準確路徑和需要的結果，並等待回覆：大檔案下載請提供可存取副本；遞歸刪除請確認使用者手動刪除；原子儲存請使用合適 Host 工具，或明確接受逐檔案儲存。語言服務缺失和持續緩衝區衝突也請使用者處理，不用原始命令繞過。獨立且受支援的工作可以繼續。
 
-檢查 `applied`、`saved` 和逐檔 `dirty` 狀態。正常成功後不需要再次讀取，也不需要 Host 人工確認。若修改已套用但儲存失敗，保留緩衝區，重試時使用 `save` 和傳回的版本，不要重新提交整批修改。
-
-既有未儲存文件預設受到保護。只有明確希望納入並儲存這些原有修改時，才設定 `allowDirty:true`。
-
-## 搜尋與導覽
-
-`search` 使用 VS Code 的 Search View 並傳回快照；`searchResults` 只讀取目前檢視，不重新發起搜尋。兩者都不保證搜尋已完成。`findFiles` 可能遺漏新檔案；已知正確路徑時應直接讀取，不要求它先出現在搜尋結果中。
-
-使用 `symbols`、`workspaceSymbols` 和 `definition` 進行語言感知導覽，結果取決於專案可用的語言提供者。
-
-## 管理連線
-
-服務隨 VS Code 視窗執行。需要時，可在命令選擇區執行 `Live Share Workspace Bridge: Restart Connection` 或 `Live Share Workspace Bridge: Stop Connection`。
-
-新視窗或重新載入會改變執行個體 ID，工作區變更會更新 epoch。出現 `instance_mismatch`、`workspace_changed` 或執行個體不可用錯誤時，重新探索並核對專案。
+參數和限制見 [API](API.zh-TW.md)，復原說明見[故障排查](TROUBLESHOOTING.zh-TW.md)，測試邊界見[驗收記錄](VALIDATION-v0.2.zh-TW.md)。

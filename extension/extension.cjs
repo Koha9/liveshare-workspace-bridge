@@ -15,6 +15,15 @@ function activate(context) {
   if (process.platform !== 'win32') return;
   const output = vscode.window.createOutputChannel('Live Share Workspace Bridge');
   let child = null, ready = false, disposed = false, epoch = 1, id, discovery;
+  const status = vscode.window.createStatusBarItem?.(vscode.StatusBarAlignment?.Right, 100);
+  if (status) { status.command = 'liveshareWorkspaceBridge.openSettings'; context.subscriptions.push(status); }
+  function updateStatus() {
+    if (!status || !api?.roots().length) { status?.hide(); return; }
+    const agent = api.permissions.value('agent.enabled', true), terminal = api.permissions.value('terminal.enabled', false);
+    status.text = !agent ? '$(lock) LSWB: Agent off' : terminal ? '$(terminal) LSWB: Host allowed' : '$(files) LSWB: Guest only';
+    status.tooltip = !agent ? 'Agent operations are disabled. Click to configure permissions.' : terminal ? 'Host terminal access is allowed; individual permissions and a verified shared RW terminal are still required. Click to configure permissions.' : 'Host terminal access is disabled. Guest operations follow their individual permissions. Click to configure permissions.';
+    status.show();
+  }
   const unregister = () => { if (discovery) { try { fs.unlinkSync(discovery); } catch {} } };
   let api;
   function publish() {
@@ -27,6 +36,7 @@ function activate(context) {
   }
   function stop() {
     unregister(); ready = false;
+    api?.dispose();
     if (child) { child.kill(); child = null; }
   }
   function start() {
@@ -58,10 +68,14 @@ function activate(context) {
     });
   }
   context.subscriptions.push(output);
-  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => { epoch++; publish(); }));
+  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => { epoch++; api?.workspaceChanged(); publish(); updateStatus(); }));
+  if (vscode.workspace.onDidChangeConfiguration) context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => { api?.configurationChanged(event); updateStatus(); }));
+  if (vscode.window.onDidCloseTerminal) context.subscriptions.push(vscode.window.onDidCloseTerminal(terminal => api?.terminalClosed(terminal)));
+  context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspaceBridge.openSettings', () => vscode.commands.executeCommand('workbench.action.openSettings', '@ext:Koha9-Lee.liveshare-workspace-bridge')));
   context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspaceBridge.restart', () => { stop(); epoch++; start(); }));
   context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspaceBridge.stop', () => { stop(); output.appendLine('Stopped by command.'); }));
   context.subscriptions.push({ dispose() { disposed = true; stop(); } });
   start(); // Also supports joining Live Share after this extension has activated.
+  updateStatus();
 }
 module.exports = { activate };

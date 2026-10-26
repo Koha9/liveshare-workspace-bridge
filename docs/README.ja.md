@@ -1,4 +1,4 @@
-# ドキュメント
+# ドキュメント v0.2
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | **日本語**
 
@@ -6,10 +6,11 @@
 
 | ガイド | 内容 |
 |---|---|
-| [使い方](USAGE.ja.md) | インストール、ウィンドウ選択、読み取り、編集、保存 |
-| [API リファレンス](API.ja.md) | リクエスト項目、レスポンス、上限、使用例 |
-| [アーキテクチャ](ARCHITECTURE.ja.md) | 通信、ワークスペースへの紐付け、ドキュメント操作 |
-| [開発ガイド](DEVELOPMENT.ja.md) | ソース構成、テスト、ビルド、パッケージ作成 |
-| [トラブルシューティング](TROUBLESHOOTING.ja.md) | 接続、編集、保存、検索の問題 |
+| [使用方法](USAGE.ja.md) | インストール、接続、権限、通常操作 |
+| [API リファレンス](API.ja.md) | リクエスト、応答、引数、上限 |
+| [構成](ARCHITECTURE.ja.md) | IPC、Host 経路、文書操作 |
+| [開発](DEVELOPMENT.ja.md) | ソース、テスト、ビルド、パッケージ |
+| [トラブルシューティング](TROUBLESHOOTING.ja.md) | 接続、権限、保存、検索、ユーザー協力 |
+| [検証記録](VALIDATION-v0.2.ja.md) | 実測証拠、未完了の検証、保留事項 |
 
-概要は[プロジェクトの README](../README.ja.md)を参照してください。
+[プロジェクト概要](../README.ja.md)

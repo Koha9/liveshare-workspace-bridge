@@ -1,86 +1,116 @@
-# API 參考
+# API 參考 v0.2
 
 [English](API.md) | [简体中文](API.zh-CN.md) | **繁體中文** | [日本語](API.ja.md)
 
 [文件](README.zh-TW.md)
 
-## 協定
+## 協議
 
-請求是 JSON 物件。共用欄位 `instance`、`epoch` 和 `workspace` 可由同名 CLI 參數補入，其值從 `instances` 取得。檔案路徑相對於選取的根目錄，並使用正斜線。
+請求使用 `op`、`instance`、`epoch` 和準確的 `workspace` URI；CLI 同名參數可提供繫結資訊。共用路徑相對於選定根目錄，使用正斜線。回應為 `{ok:true,result:...}` 或 `{ok:false,error:{code,message,details?}}`；仍需檢查 `applied`、`saved`、逐檔案結果、`complete`、截斷、任務狀態和退出碼。請求上限 2 MiB，回應上限 4 MiB。
 
-- 請求上限：2 MiB。
-- 回應上限：4 MiB。
-- 單次讀取傳回的文字上限：1 MiB。
+## 權限與 Host 繫結
 
-回應為 `{"ok":true,"result":...}` 或 `{"ok":false,"error":{"code":"...","message":"..."}}`。回應外層成功不代表可忽略 `applied`、`saved` 和逐檔結果。套用失敗、儲存失敗或批次讀取部分出錯時，CLI 傳回非零結束代碼。
+設定名稱保留英文，位於 `liveshareWorkspaceBridge.*`，使用 machine scope，只能在 User／Remote 設定中組態，工作區不能覆蓋。
 
-## 讀取與編輯
-
-```json
-{"op":"info"}
-{"op":"list","path":"src"}
-{"op":"read","path":"src/main.ts","startLine":20,"endLine":100}
-{"op":"readMany","files":[{"path":"src/main.ts","startLine":20,"endLine":100},{"path":"package.json"}]}
-{"op":"edit","files":[{"path":"src/main.ts","expectedVersion":4,"changes":[{"oldText":"return oldValue;","newText":"return newValue;"}]}]}
-{"op":"edit","files":[{"path":"src/main.ts","expectedVersion":4,"changes":[{"startLine":20,"endLine":23,"newText":"replacement lines"}]}]}
-{"op":"write","path":"config.json","expectedVersion":2,"text":"{}\n"}
-{"op":"create","path":"src/new/module.ts","text":"export const value = 1;\n","eol":"LF"}
-{"op":"save","path":"src/main.ts","expectedVersion":5}
-```
-
-`read` 傳回緩衝區文字、`version`、`dirty`、`eol` 和 `lineCount`。行號從 1 開始且包含兩端。`withHash:true` 才額外傳回目前文字的 SHA-256，不是原始檔案位元組雜湊。局部輸出不表示底層提供者使用串流讀取。
-
-`edit.files` 最多包含 100 份不同文件，每份文件最多 1000 項修改。所有位置相對於修改前的文件，範圍不可重疊。`oldText` 必須非空且唯一；`all:true` 取代所有非重疊符合項目。
-
-依行修改選取指定的完整行，不包含最後一行末尾的換行分隔符號。可用 `expectedText` 檢查選取內容。原生範圍為 `range:{start:{line,character},end:{line,character}}`：行號從 0 開始，不包含結束位置，character 使用 UTF-16 位移。超出範圍的位置會被拒絕。依位置修改須提供 `expectedVersion`、`expectedHash` 或 `expectedText`。
-
-`write` 取代既有文件，要求 `expectedVersion` 或 `expectedHash`；不存在的檔案使用 `create`。建立和編輯都會儲存目標文件。既有檔案保留 EOL；建立時推斷第一個換行，沒有換行則預設 LF，也可明確指定 `LF`／`CRLF`。
-
-`edit` 傳回 `{applied,saved,files:[{uri,version,dirty,saved,changes,error?}]}`。先提交一份 WorkspaceEdit，再逐檔儲存；失敗不會自動回復或重送。`save` 要求目前的 `expectedVersion`。只有明確納入原有未儲存內容時才使用 `allowDirty:true`。
-
-## 檔案操作
-
-```json
-{"op":"mkdir","path":"new/nested"}
-{"op":"stat","path":"src/main.ts"}
-{"op":"copy","path":"src/main.ts","to":"backup/main.ts"}
-{"op":"move","path":"backup/main.ts","to":"backup/renamed.ts"}
-{"op":"delete","path":"backup/renamed.ts"}
-```
-
-建立、複製與移動預設建立缺少的父目錄，可用 `parents:false` 關閉。複製與移動預設拒絕覆寫，除非設定 `overwrite:true`。複製只支援檔案；移動支援檔案和目錄。刪除只支援檔案與空目錄，不使用資源回收筒，並拒絕 `recursive:true`。來源或目的地有未儲存文件時，這些操作會被阻擋。
-
-`mkdir` 直接交給提供者處理，包括目錄已存在的情況。`stat` 中未知的大小或時間保持 `null`。操作失敗前可能已建立父目錄；檔案操作不保證交易回復。
-
-## 搜尋與程式碼導覽
-
-```json
-{"op":"findFiles","pattern":"src/**/*.ts","limit":100}
-{"op":"search","query":"handleRequest","include":"src/**/*.ts","regex":false,"caseSensitive":true,"waitMs":800}
-{"op":"searchResults","searchId":1}
-{"op":"diagnostics","path":"src/main.ts"}
-{"op":"symbols","path":"src/main.ts"}
-{"op":"workspaceSymbols","query":"Handler"}
-{"op":"definition","path":"src/main.ts","line":20,"character":8}
-```
-
-`findFiles` 最多傳回 1000 項，帶有 `possiblyCapped` 和 `complete:null`。預設遵守排除設定，可依需要使用 `exclude` 或 `useExcludes:false`。結果可能遺漏新檔案。
-
-`search` 要求單一 Live Share 根目錄，並使用 Search View。參數包括 `include`、`exclude`、`regex`、`caseSensitive` 和 `useExcludes`（預設 true）。`waitMs` 為 0–5000，預設 800，僅控制取樣延遲，不表示完成。傳回 `search.id`、`snapshot`、`truncated`、`complete:null` 和 `correlation:"best_effort"`。`maxCharacters` 預設 100000，上限 1000000。
-
-`searchResults` 不發起新搜尋。選用的 `searchId` 能偵測橋接發起的其他查詢，但無法偵測使用者手動變更搜尋檢視。
-
-`definition` 使用從 1 開始的行號和從 0 開始的 UTF-16 字元位移。傳回位置保留 URI scheme，並使用原生的從 0 開始的位置。語言結果為空不表示建置成功。
-
-`providerRead` 傳回提供者的 UTF-8 文字與位元組數，用於疑難排解或明確要求的核對，不是正常寫入後的預設步驟。
-
-## 錯誤
-
-| 錯誤碼／結果 | 意義 |
+| 設定 | 含義 |
 |---|---|
-| `instance_mismatch`、`workspace_changed` | 重新探索並確認目標工作區。 |
-| `content_changed` | 編輯前更新受影響的文字或版本。 |
-| `text_not_found`、`ambiguous_match` | 調整原文比對或範圍。 |
-| `dirty_document` | 原有未儲存內容受到保護。 |
-| `saved:false` | 修改可能仍在編輯器中，應重試儲存而非重新編輯。 |
-| `transport_outcome_unknown`、`requestSent:true` | 重試修改前先檢查受影響的狀態。 |
+| `agent.enabled` | 總開關，預設 true；info/status 仍可檢查。 |
+| `terminal.enabled` | Host 共用終端存取，預設 false；關閉時所有 Host 功能的有效權限關閉。 |
+| `permissions.OPERATION` | 單項權限；別名繼承基礎操作，見 `info.permissions.configured/effective`。 |
+| `terminal.name` | 準確的共用 RW 終端名；留空時必須只有一個合格共用終端，排除 Guest 本機終端。 |
+| `terminal.hostWorkspacePath` | 可選顯式 Host 根目錄；否則驗證共用 PowerShell 當前目錄。 |
+| `terminal.commandTimeoutMs` | 預設 120000，範圍 1000..3600000 毫秒。 |
+| `terminal.maxOutputCharacters` | stdout/stderr 各自保留的字元數，預設 65536，範圍 1024..262144。 |
+| `transfer.chunkBytes` | 單塊原始位元組數，預設 32768，範圍 1024..65536。 |
+| `transfer.idleTimeoutMs` | 傳輸句柄／暫存資源空閑壽命，預設 120000，範圍 10000..900000 毫秒。 |
+
+原始 Host 命令要求全部操作權限，避免繞過細分限制。文件修改需要 save 權限；創建父目錄需要 mkdir；覆蓋位元組檔案需要 write。這些是操作授權，不是作業系統檔案沙箱。
+
+```json
+{"op":"hostStatus"}
+{"op":"hostBind"}
+```
+
+`hostStatus` 不發送終端命令。`hostBind` 通過自有隨機臨時 bootstrap 檔案驗證 Host/Guest 根目錄，載入記憶體工作階段輔助程式後刪除檔案；不安裝常駐 Host agent，不改身份驗證。目前 Host 僅支援 Windows PowerShell。關閉權限阻止新請求，不撤銷已派發操作。
+
+## 文字、檔案與語言功能
+
+```json
+{"op":"list","path":"src"}
+{"op":"read","path":"src/main.ts","startLine":1,"endLine":80}
+{"op":"readMany","files":[{"path":"a.txt"},{"path":"b.txt","startLine":1,"endLine":40}]}
+{"op":"edit","files":[{"path":"a.txt","expectedVersion":3,"changes":[{"oldText":"old","newText":"new"}]}]}
+{"op":"write","path":"a.txt","expectedVersion":4,"text":"replacement\n"}
+{"op":"create","path":"new/a.txt","text":"hello\n","eol":"LF"}
+{"op":"save","path":"a.txt","expectedVersion":5}
+{"op":"mkdir","path":"new/nested"}
+{"op":"stat","path":"a.txt"}
+{"op":"move","path":"old.txt","to":"new.txt","parents":false}
+{"op":"delete","path":"empty-directory"}
+{"op":"references","path":"src/a.ts","line":12,"character":8}
+{"op":"renameSymbol","path":"src/a.ts","line":12,"character":8,"newName":"newValue","preview":true}
+{"op":"format","path":"src/a.ts","tabSize":2,"insertSpaces":true}
+```
+
+讀取回傳緩沖文字、version、dirty、EOL 和 lineCount；行號從 1 開始，兩端包含。`withHash:true` 是文件文字雜湊，不是 Host 原始位元組雜湊。一次回傳文字上限 1 MiB，打開文件仍可能存取完整提供者資源。
+
+`edit.files` 最多 100 個不同目標，每檔案最多 1000 項修改。`oldText` 預設必須唯一，刻意全替換才用 `all:true`。位置相對於原始內容且不得重疊。按行編輯使用 `startLine/endLine/newText/expectedText?`，不包含最後的換行分隔符。原生範圍采用從 0 開始的行號和 UTF-16 字元位置，結束位置不包含在內，並支援版本／雜湊／原文保護。整文件 `write` 需要 `expectedVersion` 或 `expectedHash`。
+
+文字按 Guest 文件 EOL 規范化，Host 協同編輯可能采用不同磁盤換行。只儲存目標文件，不提供跨檔案事務；部分失敗明確報告。`allowDirty:true` 表示包含保留和儲存既有未儲存內容。
+
+`symbols`、`workspaceSymbols`、`definition`、`diagnostics` 保留。語言查詢輸入使用從 1 開始的行號和從 0 開始的 UTF-16 字元位置。重新命名和格式化檢查範圍、版本和 dirty 狀態並儲存目標；重新命名只重建文字編輯，不應用提供者回傳的檔案操作。`preview:true` 只回傳計劃。格式化需要語言提供者。
+
+`delete` 拒絕 `recursive:true`。`stat` 是可能缺少大小／時間的提供者中繼資料；`providerRead` 是顯式 UTF-8 驗證，不是二進位讀。Host 寫入在同一回應中僅為受影響的已打開 Guest 文件計算規范化摘要，每檔案上限 16 MiB。`hostStat` 的 `withTextHash:true` 可在結果未知後顯式刷新預期摘要；干凈緩衝區必須內容匹配，版本增加本身不夠。未刷新時報告 `editor_refresh_pending`，保留內容，不全域還原或回傳已知過期文字。
+
+## 已儲存檔案的完整搜尋
+
+```json
+{"op":"search","query":"handleRequest","include":["src/**/*.ts"],"exclude":["**/generated/**"],"caseSensitive":true,"limit":500}
+{"op":"findFiles","pattern":["src/**/*.ts"],"limit":500}
+```
+
+include/exclude 接受單個 glob 或數組，不是逗號分隔的模式語言。`regex/wholeWord/caseSensitive` 預設 false。`useExcludes:false` 包含隱藏和忽略檔案，但始終排除 `.git` 管理路徑；否則使用 rg 忽略規則，不完全重現 VS Code 條件排除。
+
+檢查 `complete/state/exitCode/truncated` 和 `scope:saved_host_files`。無匹配退出碼 1 正常。輸出／結果限制或解析失敗使 complete 為 false。limit 預設 500、最大 10000。匹配包含相對路徑、從 1 開始的行號、文字和 UTF-8 位元組偏移；構造 UTF-16 編輯前讀取相關文字。dirty 文件單獨報告，絕不自動儲存。
+
+`searchSnapshot/searchResults/findFilesSnapshot` 顯式保留舊編輯器／提供者接口，完整性未知；不需要 Host，但不是 Host 缺失時的自動替代。
+
+## 命令與補丁
+
+```json
+{"op":"hostExec","command":"node --test","cwd":"","timeoutMs":120000,"waitMs":1000}
+{"op":"hostJobPoll","jobId":"<id>","waitMs":5000,"stdoutOffset":0,"stderrOffset":0}
+{"op":"hostJobCancel","jobId":"<id>"}
+{"op":"hostJobForget","jobId":"<id>"}
+{"op":"applyPatch","patch":"<Git-style unified text patch>","checkOnly":true}
+```
+
+已知命令會修改檔案時，提供 `affectedPaths`，最多 100 個相對路徑。只針對這些已打開緩衝區檢查最終 Host 文字摘要；其他任意副作用不追蹤。
+
+命令執行在自有子處理程序和 Windows Job Object 中。超時／取消只針對其處理程序樹，不終止共用 PowerShell。命令長度 1..8000，`waitMs` 0..5000，timeout 1000..3600000 毫秒。狀態為 `running/completed/timed_out/cancelled`，completed 不代表退出碼為 0。輸出流有界、持續排空並標記截斷；重用回傳的輸出游標。只能 forget 已結束任務；每次繫結最多保留 16 個任務。
+
+文字補丁最多 1 MiB／100 檔案，使用 `a/`、`b/` 路徑；拒絕越界、`.git`、二進位、符號鏈接和子模塊補丁。先 `git apply --check` 再應用；`checkOnly:true` 不寫入，拒絕 dirty 目標。Host 需要 Git，不自動 stage/commit/push。補丁行尾跟隨 Host Git 組態；需要位元組精確保真時用位元組 API。
+
+## 原始位元組和大檔案上傳
+
+```json
+{"op":"hostStat","path":"asset.bin","withHash":true}
+{"op":"readBytes","path":"asset.bin"}
+{"op":"writeBytes","path":"asset.bin","base64":"<canonical base64>","parents":false}
+{"op":"writeBytes","path":"asset.bin","base64":"<base64>","overwrite":true,"expectedCurrentSha256":"<raw Host hash>"}
+{"op":"copy","path":"assets/a.png","to":"backup/a.png"}
+{"op":"copyDirectory","path":"template","to":"new-template"}
+```
+
+小位元組 API 受 chunkBytes 限制並校驗 SHA-256。目錄複製目標必須新建，拒絕重解析點和 Git 管理樹；路徑及祖先保持在已驗證 Host 根目錄內。覆蓋現有位元組檔案需要 `expectedCurrentSha256`，與文字雜湊不同。普通寫入不預設追加提供者驗證。
+
+```powershell
+node "<client>" upload --instance "<id>" --epoch "<epoch>" --workspace "vsls:/" --input "<local.bin>" --path "assets/file.bin"
+node "<client>" apply-patch --instance "<id>" --epoch "<epoch>" --workspace "vsls:/" --input "<local.patch>" --check-only
+```
+
+上傳覆蓋需要 `--overwrite` 和 `--expected-current-sha256 HASH`。當前開放的傳輸協議為 `transferBeginWrite`、`transferWrite(sequence/base64)`、`transferCommit(sha256)`、`transferAbort`；檔案通過多個有界塊上傳。
+
+上傳暫存在 Host 自有臨時檔案中，關閉時刪除並有空閑過期機制，只在 commit 時更新目標。立即重複上一上傳序號及相同內容是冪等的，普通修改不會自動重送。提交回報紀錄丟失時先檢查目標狀態和雜湊，再決定是否重新啟動。
+
+**大檔案下載本版停用**：`transferOpenRead/transferRead`（含 CLI download）在 Host 派發前回傳 `feature_unavailable`。約 1.1 MB 的實際下載曾反復使終端停住，根因未解決；禁止迴圈小塊讀取繞過。小檔案讀取和大檔案上傳仍可用。未支援的任務需要按 skill 請求使用者提供準確的手動結果或可存取副本，並在回覆後繼續依賴步驟。

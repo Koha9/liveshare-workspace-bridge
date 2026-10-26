@@ -6,7 +6,7 @@
 
 ## Requirements
 
-Use Windows, Node.js, and a confirmed Python 3 executable. The extension uses built-in Node modules and Windows PowerShell; package builds use Python's standard library. No dependency installation is required.
+Use Windows, Node.js, and a confirmed Python 3 executable. The extension uses built-in Node modules and Windows PowerShell; the in-memory Host runtime is C# compiled by the Host PowerShell session; package builds use Python's standard library. No dependency installation is required.
 
 ## Source layout
 
@@ -31,7 +31,7 @@ $pythonExe = '<path-to-python.exe>'
 & $pythonExe .\scripts\build.py --check
 ```
 
-Tests cover edit preflight, save failures, dirty-buffer protection, workspace binding, IPC behavior, and process cleanup. Normal tests do not modify a connected Live Share project.
+Tests cover edit preflight, save failures, dirty-buffer protection, live permission dependencies, patch paths, stale-model content guards, real Windows IPC, Host byte transfers, bounded output, cancellation and process cleanup. Normal tests do not modify a connected Live Share project.
 
 ## Build packages
 
@@ -55,3 +55,7 @@ English files have no locale suffix; translations use `.zh-CN`, `.zh-TW`, and `.
 `dist/`, `.local/`, dependency folders, and local configuration are ignored by Git. Keep access tokens, local receipts, and machine-specific paths out of committed files. The Windows workflow in `.github/workflows/ci.yml` runs checks and builds without publishing packages.
 
 The skill instructions and references are English-only; do not add locale variants inside the skill directory.
+
+## v0.2 Host testing
+
+Host integration is opt-in and uses a dedicated RW shared PowerShell and unique fixtures. Permission changes made by a test must be leased and restored without overwriting concurrent user changes. Never stage/commit/push as part of tests. All Host features must be denied while terminal access is off. Normal tests must never fall back to a real Guest terminal.

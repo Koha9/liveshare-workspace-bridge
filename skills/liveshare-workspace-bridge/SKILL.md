@@ -1,62 +1,78 @@
 ---
 name: liveshare-workspace-bridge
-description: "Read, edit, and save files in a Windows VS Code Live Share Guest workspace through Live Share Workspace Bridge. Use for shared-project tasks involving vsls: URIs, multi-file edits, file operations, or native editor search."
+description: "Read, edit, search, and save a Windows VS Code Live Share Guest workspace through Live Share Workspace Bridge. Use its verified Host RW PowerShell channel for complete saved-file search, commands, patches, byte operations, and large transfers."
 metadata:
-  version: "0.1.1"
+  version: "0.2.0"
 ---
 
 # Live Share Workspace Bridge
 
-Requires Windows, Node.js, and Live Share Workspace Bridge in the connected VS Code Guest window. Operate the shared project through the bundled `scripts/liveshare.cjs` client, which uses a current-user Windows named pipe; no HTTP endpoint, MCP configuration, or access token is needed.
+Use this skill's `scripts/liveshare.cjs` with extension v0.2. The local connection is a current-user Windows named pipe; no HTTP port or token is required. Host access is optional and controlled by the user's extension settings.
 
-## Select the workspace once
+## Connect once
 
-Resolve the client path relative to this skill's directory. Run Node from a usable local directory, not a virtual workspace path.
+Run from a usable local directory using a confirmed Node executable:
 
 ```powershell
 node "<skill-dir>/scripts/liveshare.cjs" instances
-```
-
-Match the intended project using `roots[].name` and its complete `roots[].uri`. Keep the selected `id`, `epoch`, and root URI for subsequent requests. With multiple windows, choose explicitly. Reuse an already verified selection instead of rediscovering, listing the root, or checking health on every operation.
-
-Write a UTF-8 JSON request to a local file and send it with the pinned selection:
-
-```powershell
 node "<skill-dir>/scripts/liveshare.cjs" --instance "<id>" --epoch "<epoch>" --workspace "vsls:/" --request "<local-request.json>"
 ```
 
-All shared-file paths are relative to that root and use forward slashes. Keep `vsls:` access inside the bridge; local filesystem tools cannot operate on those URIs.
+Match the intended project by root name and complete URI; retain its ID, epoch and root. Reuse that selection rather than rediscovering or listing the root every time. Shared paths are workspace-relative with forward slashes; local shell/rg/apply_patch cannot operate on `vsls:`.
 
-## Read, edit, and save
+Inspect version and effective permissions. A v0.1 extension does not provide the v0.2 Host APIs. Permission changes take effect without restart. Identify disabled settings and wait for the user to enable them; never edit permission settings or switch routes to bypass a denied operation.
 
-1. Read applicable project instructions and relevant text with `read` or `readMany`. Prefer useful ranges for large files. Keep the returned text and `version`; a small response does not imply streaming provider access.
-2. Prefer one `edit` request for related changes across files. Use unique `oldText` matches and include `expectedVersion` when available. All changes in a file refer to its original content. Use `all:true` only when every occurrence should change.
-3. Inspect `applied`, `saved`, and each target's `dirty` state. After a successful save, continue without automatic provider rereads, full-text hashes, repeated reads, or Host confirmation.
+## Missing Host RW terminal: ask once and wait
+
+**On `host_terminal_required`, immediately ask the user once, in their language, to have the Host open and share a read/write PowerShell terminal and connect to it from this Guest window. Stop dependent Host work and wait for their response.** Keep an unresolved-request flag for the task; do not repeat the question or poll while waiting.
+
+- Never create an ordinary Guest terminal, select a substitute by guess, or silently use another execution channel.
+- Multiple eligible shared terminals require one request for the exact intended name, not trying candidates.
+- After the user confirms setup changed, verify `hostStatus`/`hostBind` once. If still unavailable, report the verification failure and keep waiting without another request/retry loop.
+- If the user has restarted the terminal after an uncertain outcome, `hostStatus.uncertain` may require `hostBind` with acknowledgeRecovery:true. Use that acknowledgement only after the user confirms it is idle/restarted.
+- Disabled terminal access is different from a missing terminal. Request the manual setting change when needed; do not ask the Host to open another terminal for a permission denial.
+- Independent non-Host work, such as reading known files, may continue.
+
+`hostBind` verifies the selected shared root using an owned random bootstrap file and loads an in-memory helper in the shared PowerShell. A local terminal with Shell Integration does not prove Host access.
+
+## Unsupported operations: request user assistance
+
+When a requested operation is unavailable, explain the specific limit in the user's language and ask them to help complete that step. Include the exact shared-relative path(s), intended result, and the confirmation or accessible local path needed to continue. Ask once per unresolved step and wait for their response before dependent work; independent supported work may continue. Do not treat a missing reply as completion or abandon the requested step silently.
+
+- **Large download / feature_unavailable:** Ask the user to copy or export the requested Host file to a location accessible to Codex and provide its local path. Do not loop readBytes, use the lossy provider for binary data, start another transport, or run a raw command to bypass the unavailable download.
+- **Recursive deletion:** Ask the user to remove the exact intended directory and confirm completion. Do not emulate recursive deletion through repeated file deletes or a raw Host command.
+- **Cross-file all-or-nothing saves:** Explain that the bridge provides per-document saves. Ask the user to perform the transaction with suitable Host tooling, or explicitly accept per-file partial-save semantics before proceeding. Do not describe a batch edit as an atomic disk transaction.
+- **Missing language provider or unresolved Guest/Host buffer conflict:** Ask the user to enable the needed provider or resolve/reopen the affected document while preserving unsaved work. Wait for their result; do not force a global revert or save stale content.
+- For another not_supported/provider_unavailable result, request the smallest concrete manual step that achieves the user's intended outcome. Permission denials use the manual settings flow above; missing Host terminals use the ask-once setup flow.
+
+After the user reports completion, use their provided path/result and only the targeted verification needed for the next step. Retain partial-save and unknown-outcome receipts. Report user-assisted completion separately from operations performed by the bridge.
+
+## Daily text work
+
+Read applicable instructions and relevant ranges using `read`/`readMany`; retain returned text and versions. Prefer one `edit` for related changes. Use unique `oldText` and expectedVersion when available; positions refer to original content. Use `all:true` only intentionally.
 
 ```json
 {"op":"read","path":"src/main.ts","startLine":1,"endLine":80}
 {"op":"edit","files":[{"path":"src/main.ts","expectedVersion":4,"changes":[{"oldText":"return oldValue;","newText":"return newValue;"}]}]}
 ```
 
-Use `create` for new files and guarded `write` for complete replacements. Use `mkdir`, file `copy`, file/directory `move`, and file/empty-directory `delete` as the task requires. Overwrite is off by default. If a parent is already known to exist, pass `parents:false` rather than issuing another directory check or creation.
+After applied:true, saved:true and target dirty:false, continue without default provider rereads, hashes or Host confirmation. `create` makes new text files; guarded `write` replaces existing documents. Partial responses do not imply streaming provider reads. Guest EOL/text state is not independent proof of Host raw bytes.
 
-Dirty documents are protected by default. Set `allowDirty:true` only when the task includes saving their existing unsaved content; preserve that content. Batch saves are not a cross-file disk transaction.
+Dirty buffers are protected. `allowDirty:true` is only for tasks including preserving and saving existing unsaved content. Batch saves are per-document, not a cross-file disk transaction. Resolve save failures and retry `save` with the receipt version rather than reapplying the batch.
 
-Read [references/api.md](references/api.md) when you need operation fields, line/range semantics, file-management options, language queries, or request limits.
+Use mkdir, move and file/empty-directory delete as authorized. Recursive deletion is unavailable. Pass parents:false when parents are already known; do not issue an extra stat merely to decide this.
 
-## Search without extra scanning
+## Select capabilities
 
-- Use `search` with a relevant `include` scope. It returns a Search View snapshot and changes that view. `complete:null` means completeness is unknown; repeated or stable snapshots do not prove completion.
-- Use `searchResults` only when another snapshot is useful, not as a default polling loop. Use `findFiles` for path discovery, but read a known path directly: new files can be missing from its results.
-- Do not emulate global search by traversing the workspace and reading every file. Use `symbols`, `workspaceSymbols`, or `definition` when a language-aware query fits the task.
+- `search`/`findFiles`: Host ripgrep. Inspect completeness, truncation and exit state; completed no-match uses exit code 1. Results cover saved Host files. Never saveAll to make search complete.
+- `searchSnapshot`/`searchResults`/`findFilesSnapshot`: explicitly limited editor/provider queries. They are not automatic substitutes for missing Host access and cannot prove exhaustive absence.
+- Language work: symbols, workspaceSymbols, definition, references, renameSymbol and format. Renames apply text edits only; provider file-operation edits are not applied. Missing providers are reported, not interpreted as a successful empty refactor.
+- `copy`/`copyDirectory`: Host byte-preserving copies. Directory copies require a new destination. Do not use the Live Share text provider as a binary channel.
+- `hostExec`: authorized Host child commands. Raw commands require all operation permissions to avoid bypassing disabled file operations. Declare affectedPaths for known file mutations; arbitrary effects are otherwise untracked. For running jobs, use hostJobPoll with useful waitMs and returned output cursors; no hot-polling or command replay. Cancel affects only the owned process tree.
+- `applyPatch`: checked Host Git text patches. checkOnly:true previews applicability. No stage, commit or push is implied.
+- `readBytes`/`writeBytes`: byte-exact Host data. Existing overwrite needs a raw expectedCurrentSha256; document text hashes are different. Use hostStat withHash:true only when that guard is needed.
+- Large files: CLI `upload --input LOCAL --path SHARED`, with the same binding arguments. Chunks and SHA-256 are handled by the client; do not encode an entire large file into one JSON request.
 
-## Recover from the actual failure
+Read [API](references/api.md) for fields and [recovery](references/recovery.md) for errors. Report actual saves, Host exit status and limitations affecting the task. Empty diagnostics do not prove tests passed. Keep commands within user scope and default to no stage/commit/push unless requested. Keep the working bridge available afterward.
 
-- On a version or text mismatch, refresh only the affected content and revise the edit.
-- If text was applied but `saved:false`, preserve the buffer and retry `save` with its returned version after resolving the cause; do not reapply the batch.
-- If a request timed out or disconnected after `requestSent:true`, its outcome is unknown. Inspect the affected state before retrying a mutation.
-- Rediscover after an unavailable instance or changed workspace binding. The same `vsls:/` string can refer to a different project after reconnection.
-
-For connection failures, read [Connection and component names](references/api.md#connection-and-component-names). Use the rules above for edit, save, and transport failures.
-
-This bridge does not supply a Host shell, remote build/Git execution, recursive deletion, directory copying, binary writes, or unified-diff parsing. Do not treat a Guest terminal or local test as Host execution. Report saved changes and any limitation that affects the requested outcome; keep a working connection available for later tasks.
+Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable` before sending Host commands in v0.2. A 1.1 MB live download repeatedly stalled the shared terminal; it is deferred pending a reliable output transport. Do not bypass this by looping small byte reads. Small bounded byte reads and large uploads remain available.

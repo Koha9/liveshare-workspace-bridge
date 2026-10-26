@@ -1,85 +1,69 @@
-# Live Share Workspace Bridge
+# Live Share Workspace Bridge v0.2
 
 [English](README.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | **日本語**
 
-Windows 上のローカルブリッジを通じて、Codex から VS Code Live Share ワークスペースのファイルを読み取り、複数のドキュメントを編集して保存できます。
+Windows のローカルブリッジを通じて、接続済みの VS Code Live Share ワークスペースを Codex から操作します。v0.2 は文書編集と、任意で有効にする検証済み Host RW PowerShell チャネルを組み合わせます。HTTP ポートや token のコピーは不要です。
 
 ## 機能
 
-- ディレクトリ、指定行、複数ファイル、未保存のエディターバッファーの読み取り。
-- 文字列の置換、行単位の編集、複数ドキュメントへの変更。
-- 変更対象のドキュメントだけを保存し、ファイルごとの結果を返却。
-- ファイルやディレクトリの作成、ファイルのコピー、移動・名前変更、ファイルや空ディレクトリの削除。
-- 診断、ドキュメントシンボル、ワークスペースシンボル、定義位置の取得。
-- VS Code 標準の検索ビューとファイル名検索の利用。
-- 現在の Windows ユーザーだけがアクセスできる名前付きパイプでの接続。
+- バッファー／範囲の読み取り、一括編集、対象文書だけの保存と明示的な結果。
+- Host ripgrep による内容検索とパス列挙。完了状態、終了コード、切り詰めを報告。
+- Host 子プロセスのコマンド実行、stdout/stderr カーソル、タイムアウト、所有するプロセスツリーのキャンセル。
+- Git で事前検証するテキストパッチ、参照検索、テキスト編集のみのシンボル名変更、言語サービスによる整形。
+- バイトを保持する読み書き、ファイルコピー、新規ディレクトリへのコピー、SHA-256 付き分割アップロード。
+- 英語の権限設定：agent 全体、操作別、連動する Host 端末アクセス。
 
-## 必要な環境
+再帰削除と複数ファイル保存の原子性は提供しません。Host 検索は保存済みファイルを対象とし、未保存バッファーを含みません。明示的なエディタースナップショットは不完全です。**大容量ダウンロードは本版では無効**です。小容量バイト読み取りと大容量アップロードは利用できます。
 
-- Windows、VS Code、Live Share。
-- 共有プロジェクトに接続した Live Share Guest ウィンドウ。
-- CLI と Codex skill を実行する Node.js。
-- パッケージをビルドする Python 3。ビルドは標準ライブラリのみを使用します。
+## 要件とインストール
 
-拡張機能は Windows 標準の Windows PowerShell を使用します。npm の依存パッケージや Host 側の追加インストールは不要です。
+Guest は Windows、VS Code、Live Share、Node.js が必要です。Host 機能には Windows Host で読み書き可能として共有した PowerShell と、Guest からの接続が必要です。検索には ripgrep、パッチには Git が必要です。Host の VS Code インストールから ripgrep を検出できます。常駐 Host agent は不要で、バインド時にメモリ上のセッションヘルパーを読み込みます。
 
-## クイックスタート
-
-### 拡張機能のビルドとインストール
+確認済みの Python 3 実行ファイルでビルドします。標準ライブラリのみを使用します。
 
 ```powershell
 $pythonExe = '<path-to-python.exe>'
 & $pythonExe .\scripts\build.py
-
 $vsix = Get-ChildItem .\dist\liveshare-workspace-bridge-*.vsix |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 code --install-extension $vsix.FullName
 ```
 
-Guest ウィンドウが使用する VS Code Profile にインストールしてください。必要に応じて `--profile '<profile-name>'` を追加します。インストールや更新後は VS Code の案内に従ってウィンドウを再読み込みし、必要なら Live Share に再接続します。
+Guest ウィンドウの Profile にインストールし、必要に応じて再読み込みして Live Share に再接続します。既存のローカル変更を確認してから `skills/liveshare-workspace-bridge/` を Codex skills ディレクトリに配置し、`$liveshare-workspace-bridge` を使用します。
 
-### Codex skill の追加
+## 権限
 
-`skills/liveshare-workspace-bridge/` を Codex の skills ディレクトリ（例：`$env:USERPROFILE\.codex\skills\liveshare-workspace-bridge`）へコピーします。同名ディレクトリがある場合は、置き換える前にローカルの変更を確認してください。`dist/` の ZIP にも同じ自己完結型の skill が含まれます。
+**Live Share Workspace Bridge: Configure Agent Permissions** を実行するか、設定で `@ext:Koha9-Lee.liveshare-workspace-bridge` を検索します。設定名は英語のままです。
 
-Codex で `$liveshare-workspace-bridge` を呼び出し、共有プロジェクトで行いたい作業を伝えてください。
+- **Allow Agent Access**：全体スイッチ。既定で有効。
+- **Allow Shared Host Terminal Access**：既定で無効。有効にしても操作別権限が適用されます。
+- 個別設定は読み取り、編集、保存、ファイル操作、検索、言語ツール、パッチ、バイト、アップロード、Host コマンドを制御します。
+- 端末アクセスを無効にすると全 Host 操作の実効権限が無効になりますが、個別設定値は保持されます。Guest 操作にはそれぞれの権限が適用されます。
+- 任意のコードは細かな制限を迂回できるため、raw Host コマンドには全操作権限が必要です。
 
-### CLI の利用
+ステータスバーは **Agent off**、**Guest only**、**Host allowed** を表示します。Host allowed は権限を表し、接続の検証成功を意味しません。設定は後続リクエストに即時反映されます。送信済み操作は取り消さず、子コマンドにはタイムアウトが残ります。
+
+Host RW 端末がない場合、skill はユーザーに一度だけ開設と共有を依頼し、返答を待ちます。通常の Guest 端末を作成したり、代替端末を推測したり、拒否を回避するため設定を変更したりしません。未対応の手順は正確なパスと目的を示して協力を依頼し、依存作業を返答まで保留します。大容量ダウンロード、再帰削除、原子的保存、言語プロバイダー不足、未解決の編集競合が対象です。
+
+## CLI
 
 ```powershell
 node .\extension\cli.cjs instances
-
-node .\extension\cli.cjs --instance '<id>' --epoch '<epoch>' `
-    --workspace 'vsls:/' --request '<request.json>'
+node .\extension\cli.cjs --instance '<id>' --epoch '<epoch>' --workspace 'vsls:/' --request '<request.json>'
+node .\extension\cli.cjs upload --instance '<id>' --epoch '<epoch>' --workspace 'vsls:/' --input '<local.bin>' --path 'assets/file.bin'
 ```
 
-`request.json` の例：
+一度選んだプロジェクトの instance/epoch/root を再利用します。固定バインドのリクエストに余分な info 確認は加えません。[使用方法](docs/USAGE.ja.md)と [API](docs/API.ja.md)を参照してください。
 
-```json
-{"op":"read","path":"README.md","startLine":1,"endLine":20}
-```
+## 設計と制約
 
-最初に対象ウィンドウを選び、インスタンス ID、epoch、ルート URI を以後のリクエストで再利用します。共有ファイルのパスは、そのルートからの相対パスです。[使い方](docs/USAGE.ja.md)と [API リファレンス](docs/API.ja.md)を参照してください。
+通常編集は文書バージョンを再利用し、関連変更をまとめて適用し、対象だけを保存します。成功後にプロバイダーの再読み取りや全文ハッシュは標準では行いません。Host バイト操作は Live Share テキストプロバイダーの非可逆なバイナリー経路を避けます。影響を受ける開いたバッファーだけを Host の正規化テキストダイジェストと照合します。バージョンの増加だけでは更新済みと判定せず、エディター全体を revert しません。
 
-## 仕組み
+文書 EOL と Host の生バイトは別の保証です。パッチの改行は Host Git 設定に従います。検索は rg の無視規則を使い、VS Code の条件付き除外を完全には再現しません。ディレクトリコピーは新規宛先のみで、途中失敗があり得ます。既存宛先のマージや再帰置換は行いません。
 
-```text
-Codex skill / CLI → current-user Windows named pipe
-                 → VS Code APIs → Live Share → shared files
-```
+名前付きパイプは現在の Windows ユーザー専用です。操作権限は任意の Host コードに対する OS サンドボックスではありません。Host 子プロセスは Windows Job Object を使い、タイムアウト／キャンセルは共有 PowerShell と分離した所有プロセスツリーを対象にします。アップロードの一時資源にはアイドル期限と整合性確認があります。
 
-ブリッジは `vsls:` URI を維持し、現在のドキュメントバッファーを操作します。複数ファイルの変更をまとめて事前確認し、1 つの WorkspaceEdit で適用した後、ドキュメントごとに保存します。正常に保存できた場合、プロバイダーからの再読み取りや全文ハッシュ計算は自動で行いません。
-
-## 制限事項
-
-- 内容検索は現在の Search View のスナップショットを返し、完了通知はありません。ファイル名検索では、新規ファイルが見つからない場合があります。
-- 複数ファイルの保存は、ファイル間で不可分なディスクトランザクションではありません。保存に失敗した場合は、各ファイルの結果を確認してください。
-- Host shell、リモートでのビルドや Git 実行、再帰的な削除、ディレクトリのコピー、バイナリ書き込み、汎用 unified diff の解析は提供しません。
-- 名前付きパイプは同一 Windows ユーザーの権限内で動く自動化インターフェースです。そのユーザーとして実行される別のプログラムを隔離するものではありません。
-
-## ドキュメント
-
-[ドキュメント一覧](docs/README.ja.md)に、セットアップ、API、アーキテクチャ、開発、トラブルシューティングのガイドがあります。
+約 1.1 MB の実ダウンロードが繰り返し共有端末を停止させ、原因は未解決です。`transferOpenRead/transferRead`（CLI download を含む）は Host 送信前に `feature_unavailable` を返します。小分け読み取りの反復で迂回せず、アクセス可能なコピーをユーザーに依頼します。[検証記録](docs/VALIDATION-v0.2.ja.md)を参照してください。
 
 ## 開発
 
@@ -90,8 +74,4 @@ npm run check
 & $pythonExe .\scripts\build.py --verify
 ```
 
-ビルド成果物は `dist/` に出力されます。ソース構成とパッケージ作成の手順は[開発ガイド](docs/DEVELOPMENT.ja.md)を参照してください。
-
-## ライセンス
-
-MIT ライセンスです。詳しくは [LICENSE](LICENSE) を参照してください。
+npm 依存関係は不要です。ソースと skill を一緒に管理し、ビルド時に自己完結型クライアントを同期します。[開発](docs/DEVELOPMENT.ja.md)、[構成](docs/ARCHITECTURE.ja.md)、[文書一覧](docs/README.ja.md)を参照してください。ライセンス：[MIT](LICENSE)。
