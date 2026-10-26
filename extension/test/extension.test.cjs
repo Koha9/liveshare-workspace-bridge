@@ -7,14 +7,15 @@ const os = require('node:os');
 const path = require('node:path');
 const { records, request } = require('../cli.cjs');
 const manifest = require('../package.json');
-test('extension starts before joining, refreshes workspace epoch, restarts and removes registration on disposal', { skip: process.platform !== 'win32', timeout: 15000 }, async t => {
+test('extension starts before joining, refreshes workspace epoch, restarts and removes registration on disposal', { skip: process.platform !== 'win32', timeout: 90000 }, async t => {
   const commands = new Map(), context = { subscriptions: [] };
   let changeFolders, changeConfiguration;
   const settings = {};
+  const bridgeOutput = [];
   class Uri { constructor(value) { this.value = value; this.scheme = 'vsls'; this.authority = ''; this.path = '/'; } toString() { return this.value; } }
   const vscode = {
     Uri,
-    window: { createOutputChannel: name => { assert.equal(name, manifest.displayName); return { append() {}, appendLine() {}, dispose() {} }; } },
+    window: { createOutputChannel: name => { assert.equal(name, manifest.displayName); return { append: text => bridgeOutput.push(text), appendLine: text => bridgeOutput.push(text + "\n"), dispose() {} }; } },
     workspace: { workspaceFolders: [], textDocuments: [], isTrusted: true, getConfiguration: section => ({ get: key => { assert.ok(Object.hasOwn(manifest.contributes.configuration.properties, `${section}.${key}`)); assert.equal(section, 'liveshareWorkspaceBridge'); return key === 'powershell' ? '' : settings[key]; } }), onDidChangeWorkspaceFolders: callback => { changeFolders = callback; return { dispose() {} }; }, onDidChangeConfiguration: callback => { changeConfiguration = callback; return { dispose() {} }; } },
     commands: { registerCommand: (name, callback) => { assert.equal(commands.has(name), false); commands.set(name, callback); return { dispose() { commands.delete(name); } }; } }
   };
@@ -26,13 +27,15 @@ test('extension starts before joining, refreshes workspace epoch, restarts and r
   extension.activate(context);
   assert.deepEqual([...commands.keys()].sort(), manifest.contributes.commands.map(x => x.command).sort());
   async function ownRecord(except) {
-    const deadline = Date.now() + 5000;
+    // PowerShell compiles the native IPC helper at startup. Shared Windows CI
+    // runners can take longer than five seconds under parallel test load.
+    const deadline = Date.now() + 20000;
     while (Date.now() < deadline) {
       const found = records().find(x => x.pid === process.pid && x.id !== except);
       if (found) return found;
       await new Promise(resolve => setTimeout(resolve, 50));
     }
-    throw new Error('Own test extension did not register.');
+    throw new Error(`Own test extension did not register within 20 seconds. Bridge output:\n${bridgeOutput.join('').slice(-4000) || '(no output)'}`);
   }
   const first = await ownRecord();
   assert.deepEqual(first.roots, []);
