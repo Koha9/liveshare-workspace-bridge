@@ -36,8 +36,8 @@ class ReleasePackageTests(unittest.TestCase):
         self.assertFalse(any('INVESTIGATION' in name or '.local' in name or '/test/' in name for name in self.members))
         stems = (
             'README', 'USAGE', 'API', 'ARCHITECTURE', 'DEVELOPMENT',
-            'TROUBLESHOOTING', 'VALIDATION-v0.2', 'IPC-SECURITY',
-            'VALIDATION-v0.2.1', 'VALIDATION-v0.2.2',
+            'TROUBLESHOOTING', 'IPC-SECURITY', 'STARTUP-DIAGNOSTICS',
+            'CHANGELOG', 'SETTINGS',
         )
         locales = ('', '.zh-CN', '.zh-TW', '.ja')
         expected = {f'extension/docs/{stem}{locale}.md' for stem in stems for locale in locales}
