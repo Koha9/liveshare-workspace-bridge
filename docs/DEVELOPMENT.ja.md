@@ -1,63 +1,41 @@
-# 開発 v0.2
+# 開発
 
 [English](DEVELOPMENT.md) | [简体中文](DEVELOPMENT.zh-CN.md) | [繁體中文](DEVELOPMENT.zh-TW.md) | **日本語**
 
-v0.2.2：**Configure IPC Access** は ownerOnly（既定）、allLocalUsers、安定 SID の selectedUsers を提供します。旧 true は既存の選択アカウントだけへ移行し、全員を自動許可しません。[IPC モード](IPC-SECURITY.ja.md)を参照してください。Host 権限は独立です。
-
-[ドキュメント](README.ja.md)
-
-## 要件
-
-Windows、Node.js、確認済み Python 3 を使用します。拡張は Node 組み込みモジュールと Windows PowerShell を使い、Host のメモリ内ランタイムは PowerShell が C# をコンパイルします。パッケージ生成は Python 標準ライブラリのみで、npm 依存関係のインストールは不要です。
-
-## ソース構成
+Windows、Node.js、確認済み Python 3 を使用します。実行は組込モジュール、Windows PowerShell、同梱 C#、パッケージは Python 標準ライブラリで、依存インストール不要です。
 
 ```text
-extension/                    Extension, CLI, and tests
-skills/liveshare-workspace-bridge/    Codex skill and self-contained client
-scripts/build.py              Synchronization, packaging, and package checks
-docs/                         User and contributor documentation
-dist/                         Generated packages and SHA-256 files
-.local/                       Local-only working files
+extension/                         Runtime, CLI and tests
+skills/liveshare-workspace-bridge/  Skill and self-contained client
+scripts/build.py                   Packaging and source checks
+docs/                              Current product/contributor guides
+dist/                              Ignored generated packages
+.local/                            Ignored local working files
 ```
 
-`extension/cli.cjs` が唯一の正規クライアントで、ビルドが skill へ同期します。インターフェース変更は API と全翻訳へ反映します。skill の指示と参照は英語のみで管理し、skill 内に言語別ファイルを追加しません。
-
-## チェックとビルド
+extension/cli.cjs が正規クライアントでビルドが skill へ同期します。版、API、翻訳を一致させ、skill 指示／参照は英語のみ管理します。
 
 ```powershell
 npm test
 npm run check
-
 $pythonExe = '<path-to-python.exe>'
-& $pythonExe .\scripts\build.py --check
-```
-
-テストは編集の事前検証、部分保存失敗、dirty 保護、即時権限依存、パッチパス、古いモデルの保護、実 Windows IPC、Host バイト基本処理、上限付き出力、キャンセル、プロセス終了を確認します。通常テストは接続済み Live Share プロジェクトを変更しません。
-
-```powershell
 & $pythonExe .\scripts\build.py
+& $pythonExe .\scripts\build.py --check
 & $pythonExe .\scripts\build.py --verify
 ```
 
-`dist/` に VSIX、自己完結型 skill ZIP、SHA-256 ファイルを生成します。`--check` は構成、バージョン、クライアント同期を読み取り専用で確認します。`--verify` は既存パッケージのメンバー、ソース、チェックサムを照合します。パッケージには翻訳済み利用文書と検証記録を含めます。
+通常テストは文書／保存／権限／IPC 契約を検査し、接続プロジェクトを変更しません。ローカル成功は全 Host、アカウント、ポリシー、遠隔、言語サービスの保証ではありません。
 
-## 実 Live Share 検証
+VSIX、skill ZIP、SHA-256 を生成します。--check は構成／版／同期、--verify は正確なソースメンバーを照合します。文書 whitelist は過去の受け入れ、issues、.local、私有 memo を除外します。
 
-`extension/test/live-v01.cjs` は明示的に有効にする旧版統合テストです。許可された接続と隔離範囲でのみ `LIVESHARE_RUN_LIVE=1` を設定します。一意なディレクトリを作成／削除し、ローカル記録を `.local/evidence/` に保存し、検索ビューのクエリも変更します。通常テストや CI に入れません。
-
-v0.2 Host 検証には専用 RW 共有 PowerShell と所有する一意なテストディレクトリを使います。テスト設定は元値を記録して復元し、同時に行われたユーザー変更を上書きしません。端末権限無効時は全 Host 操作を拒否し、Guest 端末へフォールバックしません。テストで stage/commit/push は行いません。37 件のローカル成功は実ダウンロード成功を意味しません。[検証記録](VALIDATION-v0.2.ja.md)で項目別の証拠と未完了の受け入れ条件を確認してください。
-
-## 文書とリポジトリ管理
-
-英語は言語接尾辞なし、翻訳は `.zh-CN/.zh-TW/.ja` で対応ページを相互リンクします。コマンド、API 識別子、数値上限、既定権限、失敗条件を一致させます。実際の設定名と API 名は翻訳しません。文書変更後にリンクとコード例を検証し、パッケージを再ビルドします。
-
-`dist/`、`.local/`、依存関係、ローカル設定は Git 対象外です。token、ローカル受領記録、ユーザーディレクトリ、Host の生パスをコミットしません。`.github/workflows/ci.yml` は Windows 上で検査／ビルドし、公開はしません。検証文書には共有可能な結果だけを記載します。
-
-明示実行のローカル sandbox IPC 検証（既存アカウント、所有一時領域の初期化、Host コマンドなし）：
+実テストは明示範囲、所有一意領域、後片付けが必要です。live-v01.cjs は LIVESHARE_RUN_LIVE=1 と検索ビュー変更を伴います。live-sandbox.cjs は既存アカウントだけで一時領域 ACL 初期化を行い得ますが Host コマンドなしです。通常 CI に含めません。
 
 ```powershell
 $env:LIVESHARE_RUN_SANDBOX = '1'
 $env:LIVESHARE_CODEX_EXE = '<absolute-path-to-codex.exe>'
 node .\extension\test\live-sandbox.cjs
 ```
+
+Host テストは対象 RW 端末／root／epoch を固定し、設定復元で同時ユーザー変更を上書きしません。端末無効は Host を拒否し Guest へ代替しません。stage/commit/push を暗黙実行しません。
+
+四言語のリンク／コマンド／上限を一致させ、変更後に参照とパッケージを検査します。機械固有記録、資格情報、Host 生パス、調査経過を公開文書／包へ入れません。生成／ローカルファイルは対象外で、Windows CI は公開しません。

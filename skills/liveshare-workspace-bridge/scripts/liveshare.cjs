@@ -8,6 +8,33 @@ const net = require('node:net');
 const crypto = require('node:crypto');
 const registry = path.join(os.homedir(), '.liveshare-local', 'instances');
 const MAX_REQUEST = 2 * 1024 * 1024, MAX_RESPONSE = 4 * 1024 * 1024;
+const STARTUP_CODES=['execution_policy_related_startup_block','shell_executable_not_found','helper_start_failed','helper_startup_failed','ipc_access_setup_failed','ipc_helper_exited','helper_stderr_observed'];
+const STARTUP_STAGES=['access_setup','account_enumeration','process_start','helper_startup','ipc_runtime','unknown'];
+const POLICY_VALUES=['Restricted','AllSigned','RemoteSigned','Unrestricted','Bypass','Undefined','Default','unknown'];
+const oneOf=(value,values,fallback='unknown')=>values.includes(value)?value:fallback;
+const safeVersion=value=>typeof value==='string'&&/^\d{1,4}(?:\.\d{1,8}){1,4}$/u.test(value)?value:'unknown';
+const safeTime=value=>typeof value==='string'&&Number.isFinite(Date.parse(value))?new Date(value).toISOString():null;
+const safeAttempt=value=>typeof value==='string'&&/^[a-f0-9-]{36}$/u.test(value)?value:null;
+function projectStartupRecord(value) {
+  if(!value||value.producer!=='lswb-startup-v1'||value.schemaVersion!==1||!Number.isSafeInteger(value.pid)||value.pid<1||!safeTime(value.observedAt))return null;
+  const current=value.current||{},shell=value.shell||{};
+  const events=(Array.isArray(value.events)?value.events:[]).slice(-8).map(e=>({code:oneOf(e.code,STARTUP_CODES,'helper_stderr_observed'),stage:oneOf(e.stage,STARTUP_STAGES),requestedExecutableName:oneOf(e.requestedExecutableName,['powershell.exe','pwsh.exe','other']),confidence:oneOf(e.confidence,['high','low','unknown']),firstSeen:safeTime(e.firstSeen),lastSeen:safeTime(e.lastSeen),attemptId:safeAttempt(e.attemptId),firstAttemptId:safeAttempt(e.firstAttemptId),count:Number.isSafeInteger(e.count)?Math.min(1000,Math.max(1,e.count)):1,historical:e.historical===true,encodingReplacementObserved:e.encodingReplacementObserved===true}));
+  return {producer:'lswb-startup-v1',schemaVersion:1,pid:value.pid,extensionVersion:typeof value.extensionVersion==='string'&&/^\d+\.\d+\.\d+$/u.test(value.extensionVersion)?value.extensionVersion:'unknown',observedAt:safeTime(value.observedAt),origin:{component:current.stage==='account_enumeration'?'guest_local_account_enumeration_helper':current.stage==='access_setup'?'guest_local_bridge_access_setup':'guest_local_ipc_helper',side:'guest',location:'local'},current:{health:oneOf(current.health,['starting','failed','ready','stopped']),stage:oneOf(current.stage,STARTUP_STAGES),attemptId:typeof current.attemptId==='string'&&/^[a-f0-9-]{36}$/u.test(current.attemptId)?current.attemptId:null,epoch:Number.isSafeInteger(current.epoch)&&current.epoch>=0?current.epoch:null},shell:{requestedExecutableName:oneOf(shell.requestedExecutableName,['powershell.exe','pwsh.exe','other']),actualExecutableName:oneOf(shell.actualExecutableName,['powershell.exe','pwsh.exe']),version:safeVersion(shell.version),edition:oneOf(shell.edition,['Desktop','Core']),effectiveExecutionPolicy:oneOf(shell.effectiveExecutionPolicy,POLICY_VALUES),policyScopes:Object.fromEntries(['MachinePolicy','UserPolicy','Process','CurrentUser','LocalMachine'].map(k=>[k,oneOf(shell.policyScopes?.[k],POLICY_VALUES)])),metadataSource:oneOf(shell.metadataSource,['requested_only','helper_ready']),actualIdentity:'unknown',externalProbeIdentity:'unknown',identityComparison:'unknown'},events};
+}
+function readStartupDiagnostics(options={}) {
+  const disk=options.fsImpl||fs,directory=options.directory||path.join(path.dirname(registry),'startup-diagnostics');
+  const records=[],issues=[];let names;
+  try{if(disk.lstatSync(directory).isSymbolicLink())return{status:'unsafe_directory',records,issues};names=disk.readdirSync(directory).filter(x=>/^[1-9]\d{0,9}\.json$/u.test(x));}
+  catch(e){return{status:e.code==='ENOENT'?'missing':['EPERM','EACCES'].includes(e.code)?'denied':'unavailable',records,issues};}
+  const limited=names.length>32;
+  for(const name of names.slice(0,32))try{
+    const file=path.join(directory,name),stat=disk.lstatSync(file);if(stat.isSymbolicLink()||!stat.isFile()||stat.size>16384){issues.push({code:'invalid_startup_record'});continue;}
+    const record=projectStartupRecord(JSON.parse(disk.readFileSync(file,'utf8')));if(!record||String(record.pid)+'.json'!==name){issues.push({code:'invalid_startup_record'});continue;}
+    const age=(options.now??Date.now())-Date.parse(record.observedAt);if(age>86400000||age< -300000)continue;
+    records.push(record);
+  }catch(e){issues.push({code:['EPERM','EACCES'].includes(e.code)?'startup_record_denied':'invalid_startup_record'});}
+  return{status:'read',records,issues,truncated:limited};
+}
 function transportError(message, sent) {
   return Object.assign(new Error(message), { code: sent ? 'transport_outcome_unknown' : 'transport_unavailable', requestSent: sent });
 }
@@ -87,7 +114,9 @@ async function discover(options = {}) {
   const hasRoots = found.some(x => x.roots.length);
   const failures = inspected.issues.length + probes.filter(x => x.status !== 'connected').length;
   const status = hasRoots ? failures ? 'partial' : 'ready' : denied ? 'access_denied' : found.length ? 'no_shared_workspace' : inspected.records.length ? 'unavailable' : inspected.issues.length || inspected.registry.status === 'unavailable' ? 'invalid_registry' : 'no_records';
-  return { readOnly: true, registry: inspected.registry, recordCount: inspected.records.length, status, instances: found, probes, issues: inspected.issues };
+  const startupDiagnostics=options.fsImpl&&!options.startupDirectory?{status:'not_checked',records:[],issues:[]}:readStartupDiagnostics({directory:options.startupDirectory||path.join(path.dirname(inspected.registry.path),'startup-diagnostics'),fsImpl:options.startupFsImpl,now:options.now});
+  startupDiagnostics.records=startupDiagnostics.records.map(record=>{const live=found.find(x=>x.pid===record.pid);return{...record,probeCorrelation:live?'ipc_connected':'not_verified',currentFailureConfirmed:false,events:record.events.map(e=>({...e,historical:!!live||record.current.health==='ready'||e.historical}))};});
+  return { readOnly: true, registry: inspected.registry, recordCount: inspected.records.length, status, instances: found, probes, issues: inspected.issues, startupDiagnostics };
 }
 function diagnosticReport(report) {
   return { ...report, instances: report.instances.map(({id,epoch,version,pid,roots,ipc}) => ({id,epoch,version,pid,roots,ipc})) };
@@ -175,4 +204,4 @@ async function main() {
   if (unsuccessful(response,body.op)) process.exitCode = 1;
 }
 if (require.main === module) main().catch(err => { process.stdout.write(JSON.stringify({ ok: false, error: { code: err.code || 'client_error', message: err.message, ...(err.details !== undefined ? { details: err.details } : {}), ...(err.requestSent !== undefined ? { requestSent: err.requestSent } : {}) } }, null, 2) + '\n'); process.exitCode = 1; });
-module.exports = { request, instances, records, inspectRecords, discover, diagnosticReport, unsuccessful, transferClient };
+module.exports = { request, instances, records, inspectRecords, discover, diagnosticReport, unsuccessful, transferClient, projectStartupRecord, readStartupDiagnostics };

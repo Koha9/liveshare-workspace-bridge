@@ -1,41 +1,30 @@
-# IPC 三模式接入 v0.2.2
+# IPC 接入與遷移
 
 [English](IPC-SECURITY.md) | [简体中文](IPC-SECURITY.zh-CN.md) | **繁體中文** | [日本語](IPC-SECURITY.ja.md)
 
 
-## 模式與範圍
+以英文 User 設定及 **Live Share Workspace Bridge: Configure IPC Access** 配置。僅明確 User 值控制信任，工作區與擴充套件預設不能擴權。
 
-執行 **Live Share Workspace Bridge: Configure IPC Access**，或編輯英文 User 設定 `liveshareWorkspaceBridge.ipc.accessMode`。信任只採用明確 User 值；工作區與擴充套件提供的預設不能擴大授權。
-
-| 模式 | 橋接所屬使用者以外的授權 |
+| 模式 | 橋接擁有者以外的範圍 |
 |---|---|
 | ownerOnly | 無，發佈預設。 |
-| allLocalUsers | 目前本機 SAM 的全部使用者帳戶，包含已停用帳戶（既有處理程序仍可能存在）；不是 Everyone、Authenticated Users、本機群組或網域使用者。 |
-| selectedUsers | 僅 ipc.selectedUserSids 儲存的精確 SID，且仍為目前本機使用者。 |
+| allLocalUsers | 目前本機 SAM 使用者，含可能仍有處理程序的停用帳戶；不是 Everyone、群組或全部網域使用者。 |
+| selectedUsers | 精確匹配 ipc.selectedUserSids 的現有本機使用者。 |
 
-橋接擁有者始終保留，即使 VS Code 由網域使用者執行；額外授權只限本機帳戶。三模式都拒絕遠端連線，並要求相同 Windows 工作階段。這是 session ID 檢查，不保證不同 run-as 權杖具有相同 logon SID。網域控制站拒絕額外帳戶列舉，避免把網域 SAM 誤當本機。
+擁有者即使是網域使用者也保留，額外授權僅本機。拒絕遠端，客戶端與橋接須相同 Windows session ID。網域控制站拒絕額外列舉。全部本機帳戶於啟動刷新，不建立或監控帳戶。
 
-信任帳戶下所有處理程序，不只 Codex／單一工作。呼叫超出 Codex 檔案系統沙箱邊界，仍受 agent／操作開關控制。Host／terminal 獨立且本設定不會啟用；若 terminal.enabled 原本為 true 且其他條件成立，獲准帳戶可能執行 Host 命令。擴大授權前選擇器會警告。
+信任帳戶下全部處理程序，不限 Codex 單一工作；呼叫超出 Codex 檔案系統沙箱，仍受 agent／操作權限約束。Host 獨立，已開啟且條件成立時可能執行 Host 命令。選擇器擴權前警告，禁止自動選更廣模式。
 
-選擇器顯示目前名稱與 SID，實際儲存 SID。改名不改授權；刪除 SID 保留為不可用、不放行，同名重建的新 SID 必須重新選擇。非法、通用群組與非本機 SID 會報告於 ipc.selectionIssues，不予授權。開啟或取消選擇器不修改設定。
+介面顯示名稱、保存 SID。改名保留授權，刪除重建不按同名繼承。不合法、非本機、不可用 SID 報告且不放行；取消無變更。
 
-allLocalUsers 在橋接啟動時列舉本機 SAM；新增帳戶於重新啟動後納入。不建立、啟用、改名帳戶，不修改機器／網域策略、憑證或網路映射。
+## 相容遷移
 
-## 舊設定相容
+新模式無明確 User 值且舊 ipc.allowCodexSandboxClients=true，首次只解析既有 CodexSandboxOffline／Online，快取 SID 並保存 ipc.selectedUserSids／selectedUsers，不選 allLocalUsers。固定後不依名稱重解，缺少帳戶不增加授權。首次快照前刪除重建的歷史 SID 無法由布林還原，不確定時先核對。
 
-新模式未設定且舊 ipc.allowCodexSandboxClients 為 true 時，首次僅解析既有兩個舊帳戶名稱，快取 SID、寫入 ipc.selectedUserSids，再設定 selectedUsers，不會自動選 allLocalUsers。固定後不再依名稱解析。缺少帳戶不猜替代身分；空結果不增加授權。布林值沒有歷史 SID，首次快照前刪除重建無法由布林還原；有疑問先核對遷移計畫／目前身分。
+明確新模式優先，舊 false／未設定維持 ownerOnly。不覆寫模糊手選或已觀察到的同時變更。舊布林保留，但明確模式後新版忽略；舊視窗須更新／重新載入才適用新模式。
 
-明確新模式（含 ownerOnly）優先。舊 false／未設定維持 ownerOnly，不遷移。不覆寫模糊手動 SID 清單或已觀察到的同時設定變更。舊布林保留相容，但新模式明確後 v0.2.2 忽略它；舊版視窗須重新載入才識別新規則，不能以新模式控制未升級視窗。
+操作權限即時生效；IPC 信任／遷移寫 User 設定並重啟，改變 instance/epoch。取得所需部署許可、暫停依賴並重新探索。不啟用 Host、不建立帳戶／憑證或改 ACL／執行策略；已派發效果不撤銷。
 
-遷移寫入 User 設定；策略變更會重新啟動本機橋接、改變 instance/epoch，需重新探索。不主動重新載入 VS Code 或啟用 Host，不撤銷已派發效果，不重送結果未知的修改。安裝可能另需重新載入宿主／視窗及重連 Live Share；影響現有連線前需部署確認。
+## 設計邊界
 
-## 診斷與實作
-
-```powershell
-node "<client>" diagnose
-node "<client>" instances
-```
-
-diagnose 僅登錄目錄與 info 探測，不繫結 Host 或寫共用檔案。區分 ready、partial、no_records、no_shared_workspace、access_denied、unavailable、invalid_registry。過期／遭拒記錄可與健康目標並存；EPERM/EACCES 不等於未啟用擴充套件。檢查模式／SID，不自行擴權、停用沙箱或自動選 allLocalUsers。
-
-以本機 NetUserEnum／NetUserGetInfo 與機器角色檢查讀取 SAM。保留明確 DACL、遠端拒絕、同工作階段、單一持續 FIRST_PIPE_INSTANCE、有界 UTF-8／回應排空。不模擬用戶端、不開 HTTP 或複製 token。[v0.2.2 驗證](VALIDATION-v0.2.2.zh-TW.md)區分模擬、真實跨帳戶與待部署驗證。
+原生管道使用明確 SID、遠端拒絕、同工作階段、單一持續伺服器與有界輸入／回應；SAM 不接受網域控制站。這不是所有 Windows 策略／遠端／帳戶均驗證的承諾。見[啟動診斷](STARTUP-DIAGNOSTICS.zh-TW.md)。

@@ -2,7 +2,7 @@
   "name": "liveshare-workspace-bridge",
   "displayName": "Live Share Workspace Bridge",
   "description": "Edit Live Share workspaces with permission controls and an optional verified Host PowerShell bridge, without ports or copied tokens.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "Koha9-Lee",
   "license": "MIT",
   "repository": {
@@ -42,7 +42,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.cjs",
-    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs"
+    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs && node --check startup-diagnostics.cjs"
   },
   "contributes": {
     "commands": [
@@ -61,6 +61,10 @@
       {
         "command": "liveshareWorkspaceBridge.configureAccess",
         "title": "Live Share Workspace Bridge: Configure IPC Access"
+      },
+      {
+        "command": "liveshareWorkspaceBridge.showStartupDiagnostics",
+        "title": "Live Share Workspace Bridge: Show Startup Diagnostics"
       }
     ],
     "configuration": {

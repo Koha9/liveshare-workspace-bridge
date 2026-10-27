@@ -1,11 +1,8 @@
-# API reference v0.2
+# API reference
 
 **English** | [简体中文](API.zh-CN.md) | [繁體中文](API.zh-TW.md) | [日本語](API.ja.md)
 
-v0.2.2: **Configure IPC Access** provides ownerOnly (default), allLocalUsers and selectedUsers with stable local SIDs. Legacy true migrates only to the existing selected accounts, never all users. See [IPC access modes](IPC-SECURITY.md). Host permissions remain independent.
-
 [Documentation](README.md)
-
 
 Requests use op, instance, epoch and exact workspace URI. CLI flags can supply the binding fields. Shared paths are relative to the selected root. Replies are `{ok:true,result:...}` or `{ok:false,error:{code,message,details?}}`; still inspect applied/saved, per-file results, complete, truncation, state and exit codes.
 
@@ -114,4 +111,4 @@ Upload overwrite uses --overwrite and --expected-current-sha256 HASH. The enable
 
 Uploads stage in owned Host temporary files, delete-on-close with idle expiry; destination is updated only at commit. Identical immediately repeated upload sequences are idempotent; ordinary mutations are never automatically replayed. A lost commit reply requires inspecting target state/hash before restarting. Unsupported steps require a concrete user-assistance request and a reply before dependent work, as described in the skill.
 
-Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable` before sending Host commands in v0.2. A 1.1 MB live download repeatedly stalled the shared terminal; it is deferred pending a reliable output transport. Do not bypass this by looping small byte reads. Small bounded byte reads and large uploads remain available.
+Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable`. Ask the user for an accessible copy and local path; do not bypass the limit with repeated byte reads or raw commands. Small byte reads and large uploads remain available.

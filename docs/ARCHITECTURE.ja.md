@@ -1,8 +1,6 @@
-# 構成 v0.2
+# 構成
 
 [English](ARCHITECTURE.md) | [简体中文](ARCHITECTURE.zh-CN.md) | [繁體中文](ARCHITECTURE.zh-TW.md) | **日本語**
-
-v0.2.2：**Configure IPC Access** は ownerOnly（既定）、allLocalUsers、安定 SID の selectedUsers を提供します。旧 true は既存の選択アカウントだけへ移行し、全員を自動許可しません。[IPC モード](IPC-SECURITY.ja.md)を参照してください。Host 権限は独立です。
 
 [ドキュメント](README.ja.md)
 
@@ -28,8 +26,8 @@ v0.2.2：**Configure IPC Access** は ownerOnly（既定）、allLocalUsers、�
 
 Host 書き込みが Guest 更新に先行する場合、影響する開いた文書だけを確認します。不一致や dirty 競合は保持して報告し、全体 revert はしません。継続する競合や未対応の手順は skill がユーザーへ協力を依頼し、返答後に依存作業を続行します。
 
-大容量ダウンロードは実端末で繰り返し停止したため、本版は `feature_unavailable` で拒否します。小分け読み取りの反復で迂回しません。小容量バイト読み取りと大容量アップロードは利用できます。出力ペーシングのローカルテスト成功は障害解決の証明ではありません。[検証記録](VALIDATION-v0.2.ja.md)を参照してください。
-
 `pipe-security.cs` / `pipe-host.ps1`: 明示 owner／sandbox DACL、ローカル／セッション照合、単一ハンドル維持、入力上限、応答排出。
 
 `local-accounts.cs` はローカル SAM と安定 SID の選択、`ipc-access.cjs` は User モード、旧 SID の一度限り移行、英語の選択画面を担当します。
+
+大容量ダウンロード（`transferOpenRead/transferRead`、CLI download を含む）は `feature_unavailable` です。アクセス可能なコピーとローカルパスを依頼し、小分け読み取り反復や raw コマンドで迂回しません。小容量読み取りと大容量アップロードは利用できます。

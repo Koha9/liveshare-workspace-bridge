@@ -1,8 +1,6 @@
-# Usage guide v0.2
+# Usage guide
 
 **English** | [简体中文](USAGE.zh-CN.md) | [繁體中文](USAGE.zh-TW.md) | [日本語](USAGE.ja.md)
-
-v0.2.2: **Configure IPC Access** provides ownerOnly (default), allLocalUsers and selectedUsers with stable local SIDs. Legacy true migrates only to the existing selected accounts, never all users. See [IPC access modes](IPC-SECURITY.md). Host permissions remain independent.
 
 [Documentation](README.md)
 
@@ -40,4 +38,4 @@ The API still rejects recursive deletion and does not guarantee cross-file atomi
 
 When a task needs an unavailable operation, the skill requests user assistance: it identifies exact paths and the required manual result, then waits before dependent work. Large downloads require an accessible copy supplied by the user; recursive deletion requires their confirmed removal. Required atomic saves need suitable Host tooling or explicit acceptance of per-file saves. Missing providers and unresolved buffer conflicts also require assistance, without forced reverts or raw-command bypasses.
 
-Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable` before sending Host commands in v0.2. A 1.1 MB live download repeatedly stalled the shared terminal; it is deferred pending a reliable output transport. Do not bypass this by looping small byte reads. Small bounded byte reads and large uploads remain available.
+Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable`. Ask the user for an accessible copy and local path; do not bypass the limit with repeated byte reads or raw commands. Small byte reads and large uploads remain available.

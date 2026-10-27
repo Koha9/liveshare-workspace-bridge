@@ -1,8 +1,6 @@
-# 使用方法 v0.2
+# 使用方法
 
 [English](USAGE.md) | [简体中文](USAGE.zh-CN.md) | [繁體中文](USAGE.zh-TW.md) | **日本語**
-
-v0.2.2：**Configure IPC Access** は ownerOnly（既定）、allLocalUsers、安定 SID の selectedUsers を提供します。旧 true は既存の選択アカウントだけへ移行し、全員を自動許可しません。[IPC モード](IPC-SECURITY.ja.md)を参照してください。Host 権限は独立です。
 
 [ドキュメント](README.ja.md)
 
@@ -30,8 +28,6 @@ v0.2.2：**Configure IPC Access** は ownerOnly（既定）、allLocalUsers、�
 
 小容量データは `readBytes/writeBytes` を使います。コピーは任意のバイナリーを保持できない Live Share テキストプロバイダーではなく Host で実行します。ディレクトリコピーは新規宛先のみです。大きなファイルは CLI `upload` を使い、ファイル全体を一つの JSON に入れません。SHA-256 を検証し、上書きには現在の生バイトハッシュが必要です。
 
-大容量ダウンロードは本版では無効で、`transferOpenRead/transferRead` は `feature_unavailable` を返します。約 1.1 MB の実転送で端末停止が発生しました。小分け読み取りの反復で迂回しません。小容量読み取りと大容量アップロードは利用できます。
-
 ## エラー、制御、ユーザーへの依頼
 
 全体／端末スイッチは後続リクエストに即時適用されますが、送信済み作業を取り消しません。agent は拒否を報告し、自分で権限を有効にしません。結果不明の送信済み変更は状態を確認し、盲目的に再送しません。
@@ -40,4 +36,6 @@ Host 書き込みが Guest モデル更新より先行することがありま�
 
 再帰削除と複数ファイルの原子的保存は未対応です。skill は未解決の手順ごとに一度、正確なパスと必要な結果を示して依頼し、返答まで依存作業を保留します。ダウンロードはアクセス可能なコピー、削除はユーザーによる削除確認、原子的保存は適切な Host ツールまたはファイル単位の保存への明示的同意が必要です。プロバイダー不足や継続するバッファー競合も依頼対象です。raw コマンドによる迂回はせず、独立した対応済み作業は続行できます。
 
-[API](API.ja.md)、[トラブルシューティング](TROUBLESHOOTING.ja.md)、[検証記録](VALIDATION-v0.2.ja.md)を参照してください。
+[API](API.ja.md)、[トラブルシューティング](TROUBLESHOOTING.ja.md)、[開発と検証範囲](DEVELOPMENT.ja.md)を参照してください。
+
+大容量ダウンロード（`transferOpenRead/transferRead`、CLI download を含む）は `feature_unavailable` です。アクセス可能なコピーとローカルパスを依頼し、小分け読み取り反復や raw コマンドで迂回しません。小容量読み取りと大容量アップロードは利用できます。

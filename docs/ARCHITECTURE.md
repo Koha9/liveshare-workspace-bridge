@@ -1,8 +1,6 @@
-# Architecture v0.2
+# Architecture
 
 **English** | [简体中文](ARCHITECTURE.zh-CN.md) | [繁體中文](ARCHITECTURE.zh-TW.md) | [日本語](ARCHITECTURE.ja.md)
-
-v0.2.2: **Configure IPC Access** provides ownerOnly (default), allLocalUsers and selectedUsers with stable local SIDs. Legacy true migrates only to the existing selected accounts, never all users. See [IPC access modes](IPC-SECURITY.md). Host permissions remain independent.
 
 [Documentation](README.md)
 
@@ -18,8 +16,8 @@ The document path remains the default for text edits, without provider rereads a
 
 Dispatched work is not rolled back on revocation. Child tasks retain a bounded timeout; synchronous filesystem actions may still complete after a Guest response timeout. Unknown outcomes are not retried. Transfers have idle expiry and owned temporary staging; directory copy can partially fail. No recursive delete or multi-file disk transaction is exposed.
 
-Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable` before sending Host commands in v0.2. A 1.1 MB live download repeatedly stalled the shared terminal; it is deferred pending a reliable output transport. Do not bypass this by looping small byte reads. Small bounded byte reads and large uploads remain available.
-
 `pipe-security.cs` / `pipe-host.ps1`: explicit owner/sandbox DACL, local/session gate, persistent single-instance pipe, bounded UTF-8 input and reply drain.
 
 `local-accounts.cs` enumerates only local SAM users and selects stable SIDs; `ipc-access.cjs` owns User-only mode resolution, one-time legacy SID migration and the English account picker.
+
+Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable`. Ask the user for an accessible copy and local path; do not bypass the limit with repeated byte reads or raw commands. Small byte reads and large uploads remain available.

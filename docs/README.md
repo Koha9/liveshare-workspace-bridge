@@ -2,17 +2,15 @@
 
 **English** | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
-v0.2.2: **Configure IPC Access** provides ownerOnly (default), allLocalUsers and selectedUsers with stable local SIDs. Legacy true migrates only to the existing selected accounts, never all users. See [IPC access modes](IPC-SECURITY.md). Host permissions remain independent.
+- [USAGE](USAGE.md)
+- [API](API.md)
+- [IPC-SECURITY](IPC-SECURITY.md)
+- [STARTUP-DIAGNOSTICS](STARTUP-DIAGNOSTICS.md)
+- [ARCHITECTURE](ARCHITECTURE.md)
+- [DEVELOPMENT](DEVELOPMENT.md)
+- [TROUBLESHOOTING](TROUBLESHOOTING.md)
+- [CHANGELOG](CHANGELOG.md)
 
-Choose a guide for the task at hand.
+[Live Share Workspace Bridge](../README.md)
 
-| Guide | Contents |
-|---|---|
-| [Usage](USAGE.md) | Install, select a window, read files, edit, and save |
-| [API reference](API.md) | Request fields, responses, limits, and examples |
-| [Architecture](ARCHITECTURE.md) | Transport, workspace binding, and document operations |
-| [Development](DEVELOPMENT.md) | Source layout, tests, builds, and packaging |
-| [Troubleshooting](TROUBLESHOOTING.md) | Connection, editing, saving, and search issues |
-| [Validation](VALIDATION-v0.2.md) | Live observations, incomplete acceptance and delivery limits |
-
-For a quick overview, see the [project README](../README.md).
+[Settings](SETTINGS.md)

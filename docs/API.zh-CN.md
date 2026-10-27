@@ -1,8 +1,6 @@
-# API 参考 v0.2
+# API 参考
 
 [English](API.md) | **简体中文** | [繁體中文](API.zh-TW.md) | [日本語](API.ja.md)
-
-v0.2.2：**Configure IPC Access** 提供 ownerOnly（默认）、allLocalUsers 和按稳定 SID 保存的 selectedUsers。旧 true 只迁移原有指定账号，不自动放行全部账号。见 [IPC 三模式](IPC-SECURITY.zh-CN.md)，Host 权限仍独立。
 
 [文档](README.zh-CN.md)
 
@@ -115,4 +113,4 @@ node "<client>" apply-patch --instance "<id>" --epoch "<epoch>" --workspace "vsl
 
 上传暂存在 Host 自有临时文件中，关闭时删除并有空闲过期机制，只在 commit 时更新目标。立即重复上一上传序号及相同内容是幂等的，普通修改不会自动重放。提交回执丢失时先检查目标状态和哈希，再决定是否重启。
 
-**大文件下载本版禁用**：`transferOpenRead/transferRead`（含 CLI download）在 Host 派发前返回 `feature_unavailable`。约 1.1 MB 的实际下载曾反复使终端停住，根因未解决；禁止循环小块读取绕过。小文件读取和大文件上传仍可用。未支持的任务需要按 skill 请求用户提供准确的手动结果或可访问副本，并在回复后继续依赖步骤。
+大文件下载（`transferOpenRead`／`transferRead`，含 CLI download）返回 `feature_unavailable`。请用户提供可访问副本和本地路径，不循环小块读取或用原始命令绕过；小文件字节读取和大文件上传仍可用。

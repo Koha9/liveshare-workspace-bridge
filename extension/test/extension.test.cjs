@@ -5,9 +5,11 @@ const Module = require('node:module');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { records, request } = require('../cli.cjs');
+const { inspectRecords, request } = require('../cli.cjs');
 const manifest = require('../package.json');
 test('extension starts before joining, refreshes workspace epoch, restarts and removes registration on disposal', { skip: process.platform !== 'win32', timeout: 90000 }, async t => {
+  const localHome=fs.mkdtempSync(path.join(os.tmpdir(),'lswb-lifecycle-home-'));
+  const records=()=>inspectRecords({registryPath:path.join(localHome,'.liveshare-local','instances')}).records;
   const commands = new Map(), context = { subscriptions: [] };
   let changeFolders, changeConfiguration;
   const settings = {};
@@ -21,9 +23,9 @@ test('extension starts before joining, refreshes workspace epoch, restarts and r
   };
   const loader = Module._load;
   let extension;
-  try { Module._load = function(name, parent, isMain) { return name === 'vscode' ? vscode : loader.call(this, name, parent, isMain); }; extension = require('../extension.cjs'); }
+  try { Module._load = function(name, parent, isMain) { if(name==='node:os')return {...os,homedir:()=>localHome};return name === 'vscode' ? vscode : loader.call(this, name, parent, isMain); }; extension = require('../extension.cjs'); }
   finally { Module._load = loader; }
-  t.after(() => { for (const disposable of context.subscriptions.slice().reverse()) disposable.dispose(); });
+  t.after(() => { for (const disposable of context.subscriptions.slice().reverse()) disposable.dispose();assert.equal(path.dirname(localHome),os.tmpdir());assert.ok(path.basename(localHome).startsWith('lswb-lifecycle-home-'));fs.rmSync(localHome,{recursive:true,force:true}); });
   extension.activate(context);
   assert.deepEqual([...commands.keys()].sort(), manifest.contributes.commands.map(x => x.command).sort());
   async function ownRecord(except) {

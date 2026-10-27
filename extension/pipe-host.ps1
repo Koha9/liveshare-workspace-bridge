@@ -10,7 +10,11 @@ $selected=ConvertFrom-Json -InputObject ([Text.Encoding]::UTF8.GetString([Conver
 if($null -eq $selected){$selected=@()}
 $localPipe = [LswbIpcV022.LocalPipe]::new($PipeName, $AccessMode, [string[]]$selected)
 $pipe = $localPipe.Stream
-$ready = @{kind='ready';ipc=@{mode=$localPipe.Mode;allowedUsers=@($localPipe.AllowedUsers);selectionIssues=@($localPipe.SelectionIssues);localOnly=$true;sameWindowsSession=$true}}
+$shell=@{actualExecutableName='unknown';version=$PSVersionTable.PSVersion.ToString();edition=[string]$PSVersionTable.PSEdition;effectiveExecutionPolicy='unknown';policyScopes=@{}}
+try{$shell.actualExecutableName=[IO.Path]::GetFileName([Diagnostics.Process]::GetCurrentProcess().MainModule.FileName)}catch{}
+# Read once in this already-running helper. This is not an external sandbox probe.
+try{$shell.effectiveExecutionPolicy=(Get-ExecutionPolicy).ToString();foreach($policy in @(Get-ExecutionPolicy -List)){$shell.policyScopes[$policy.Scope.ToString()]=$policy.ExecutionPolicy.ToString()}}catch{}
+$ready = @{kind='ready';shell=$shell;ipc=@{mode=$localPipe.Mode;allowedUsers=@($localPipe.AllowedUsers);selectionIssues=@($localPipe.SelectionIssues);localOnly=$true;sameWindowsSession=$true}}
 [Console]::Out.WriteLine(($ready|ConvertTo-Json -Compress -Depth 4))
 [Console]::Out.Flush()
 function Wait-Task($Task, [int]$TimeoutMs) {

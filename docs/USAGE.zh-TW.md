@@ -1,8 +1,6 @@
-# 使用指南 v0.2
+# 使用指南
 
 [English](USAGE.md) | [简体中文](USAGE.zh-CN.md) | **繁體中文** | [日本語](USAGE.ja.md)
-
-v0.2.2：**Configure IPC Access** 提供 ownerOnly（預設）、allLocalUsers 及穩定 SID 的 selectedUsers。舊 true 僅遷移既有指定帳戶，不自動允許全部帳戶。見 [IPC 三模式](IPC-SECURITY.zh-TW.md)，Host 權限獨立。
 
 [文件](README.zh-TW.md)
 
@@ -30,8 +28,6 @@ v0.2.2：**Configure IPC Access** 提供 ownerOnly（預設）、allLocalUsers �
 
 小數據用 `readBytes`／`writeBytes`。複製由 Host 完成，因為 Live Share 文字提供者不能保證二進位位元組。目錄複製目標必須是新目錄。大檔案用 CLI `upload`，不要將整個檔案塞入一個 JSON 請求。上傳校驗 SHA-256；覆蓋現有檔案需要當前原始位元組雜湊。
 
-大檔案下載本版停用，`transferOpenRead`／`transferRead` 回傳 `feature_unavailable`。約 1.1 MB 的實際下載曾使共用終端停住；不迴圈小塊讀取繞過。小檔案位元組讀取和大檔案上傳仍可用。
-
 ## 錯誤、控制與使用者協助
 
 總開關和終端開關即時約束後續請求，不撤銷已經派發的工作。agent 報告權限拒絕，不自行啟用。結果未知的已發送修改必須先檢查狀態，不能盲目重送。
@@ -40,4 +36,6 @@ Host 寫入可能早於 Guest 模型刷新。擴充套件只對受影響的已�
 
 遞歸刪除和跨檔案原子儲存不可用。skill 對每個未解決步驟請求一次使用者協助，說明準確路徑和需要的結果，並等待回覆：大檔案下載請提供可存取副本；遞歸刪除請確認使用者手動刪除；原子儲存請使用合適 Host 工具，或明確接受逐檔案儲存。語言服務缺失和持續緩衝區衝突也請使用者處理，不用原始命令繞過。獨立且受支援的工作可以繼續。
 
-參數和限制見 [API](API.zh-TW.md)，復原說明見[故障排查](TROUBLESHOOTING.zh-TW.md)，測試邊界見[驗收記錄](VALIDATION-v0.2.zh-TW.md)。
+參數和限制見 [API](API.zh-TW.md)，復原說明見[故障排查](TROUBLESHOOTING.zh-TW.md)，測試邊界見[開發與驗證邊界](DEVELOPMENT.zh-TW.md)。
+
+大檔案下載（`transferOpenRead`／`transferRead`，含 CLI download）回傳 `feature_unavailable`。請使用者提供可存取副本與本機路徑，不反覆小塊讀取或用原始命令繞過；小檔案位元組讀取與大檔案上傳仍可用。

@@ -1,4 +1,6 @@
-# API v0.2
+# API reference
+
+This reference describes client/extension 0.2.3. For a different installation, check info.version and info.operations; unavailable fields remain unknown. Operation permissions update live, while IPC trust/migration restarts the bridge.
 
 Requests use op, instance, epoch and exact workspace URI. CLI flags can supply the binding fields. Shared paths are relative to the selected root. Replies are `{ok:true,result:...}` or `{ok:false,error:{code,message,details?}}`; still inspect applied/saved, per-file results, complete, truncation, state and exit codes.
 
@@ -107,8 +109,18 @@ Upload overwrite uses --overwrite and --expected-current-sha256 HASH. The enable
 
 Uploads stage in owned Host temporary files, delete-on-close with idle expiry; destination is updated only at commit. Identical immediately repeated upload sequences are idempotent; ordinary mutations are never automatically replayed. A lost commit reply requires inspecting target state/hash before restarting. Unsupported steps require a concrete user-assistance request and a reply before dependent work, as described in SKILL.md.
 
-Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable` before sending Host commands in v0.2. A 1.1 MB live download repeatedly stalled the shared terminal; it is deferred pending a reliable output transport. Do not bypass this by looping small byte reads. Small bounded byte reads and large uploads remain available.
-
-## v0.2.2 IPC compatibility
+## IPC access and compatibility
 
 CLI diagnose performs only registry/info probes. English User settings ipc.accessMode (ownerOnly/allLocalUsers/selectedUsers, release default ownerOnly) and ipc.selectedUserSids control local same-Windows-session access. Configure IPC Access displays current local names and saves SID strings. Workspace values cannot broaden trust. Invalid, foreign or deleted SID references are reported and not granted; same-name recreation is not substituted. Enabled legacy trust migrates once to selectedUsers, never allLocalUsers; explicit mode overrides the legacy boolean. No automatic Host permission changes. These settings affect all allowed-account processes, not just Codex, and bridge calls are outside Codex filesystem sandbox restrictions. Migration/configuration changes restart the bridge: obtain required deployment approval and rediscover. Read the skill's discovery and assistance flow before changing routes or asking to reinstall an already-running extension.
+
+## Local startup summaries
+
+CLI diagnose may include startupDiagnostics independently of IPC, under existing filesystem permissions. Use only classified metadata; unknown identity/scope and missing snapshots remain unknown. A live correlated info probe outranks old failed snapshots; ready self-report alone does not prove client access. Ask for Show Startup Diagnostics if unreadable. No raw-log instructions, ACL expansion, automatic policy/shell change or replay.
+
+## Unavailable operations
+
+Large downloads (transferOpenRead/transferRead, including CLI download) return feature_unavailable. Ask for an accessible user-provided copy; do not loop byte reads or run a raw command to bypass the restriction. Recursive deletion is unavailable. Required cross-file atomic saves need user tooling or explicit acceptance of per-file semantics. Directory copies require a new destination and may leave a partial result on failure.
+
+## Legacy IPC migration contract
+
+When no explicit User accessMode exists and legacy allowCodexSandboxClients is true, the extension resolves only the two existing legacy accounts, caches their SIDs and writes selectedUserSids plus selectedUsers. It never selects allLocalUsers. An explicit mode wins; false/unset stays ownerOnly. The old boolean cannot reconstruct identities deleted/recreated before its initial snapshot; do not guess replacements. Migration writes User settings and restarts IPC, requiring any necessary approval and rediscovery. These are compatibility rules, not authorization to modify configuration yourself.

@@ -1,8 +1,6 @@
-# 故障排查 v0.2
+# 故障排查
 
 [English](TROUBLESHOOTING.md) | **简体中文** | [繁體中文](TROUBLESHOOTING.zh-TW.md) | [日本語](TROUBLESHOOTING.ja.md)
-
-v0.2.2：**Configure IPC Access** 提供 ownerOnly（默认）、allLocalUsers 和按稳定 SID 保存的 selectedUsers。旧 true 只迁移原有指定账号，不自动放行全部账号。见 [IPC 三模式](IPC-SECURITY.zh-CN.md)，Host 权限仍独立。
 
 [文档](README.zh-CN.md)
 
@@ -18,8 +16,6 @@ Host 功能需要已连接的共享 RW Windows PowerShell，普通 Guest 终端�
 
 绑定通过自有随机 bootstrap 临时文件验证根目录。已发送请求超时后通道隔离，不能重放修改。保留回执、检查目标状态，等待用户确认终端空闲或已重启，再以 `acknowledgeRecovery:true` 显式重新绑定。超时诊断只有计数，不包含捕获的文件内容。
 
-实际大文件下载曾使终端停住，本版已禁用；不循环字节读取模拟。大文件上传和有界字节 API 有实测证据。新增输出节流尚未证明可修复持续下载。需要下载时请用户提供可访问副本和本地路径。
-
 ## 编辑与 Host 修改
 
 使用当前版本进行受保护编辑，保留既有未保存内容。已应用但保存失败时，用返回版本只重试 `save`，不重新应用整批文本。批量保存逐文件完成，不是事务。
@@ -34,4 +30,6 @@ Host rg 搜索已保存文件；超限或失败时 complete 为 false，无匹�
 
 字节覆盖需要当前 Host 原始 SHA-256。目录复制只允许新目标，失败可能留下部分目录。递归删除请用户完成并确认；跨文件原子保存请使用合适 Host 工具，或由用户明确接受逐文件语义。对每个未解决步骤请求一次协助，说明准确路径和目标结果，等待回复后再继续依赖工作；不能静默跳过或用原始命令绕过。
 
-遇到 `response_limit` 时请求相关范围或更少结果。提供者的局部文本响应不代表底层流式读取。参见 [API](API.zh-CN.md) 与[验收记录](VALIDATION-v0.2.zh-CN.md)。
+遇到 `response_limit` 时请求相关范围或更少结果。提供者的局部文本响应不代表底层流式读取。参见 [API](API.zh-CN.md) 与[开发与验证边界](DEVELOPMENT.zh-CN.md)。
+
+大文件下载（`transferOpenRead`／`transferRead`，含 CLI download）返回 `feature_unavailable`。请用户提供可访问副本和本地路径，不循环小块读取或用原始命令绕过；小文件字节读取和大文件上传仍可用。

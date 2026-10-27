@@ -1,8 +1,6 @@
-# API リファレンス v0.2
+# API リファレンス
 
 [English](API.md) | [简体中文](API.zh-CN.md) | [繁體中文](API.zh-TW.md) | **日本語**
-
-v0.2.2：**Configure IPC Access** は ownerOnly（既定）、allLocalUsers、安定 SID の selectedUsers を提供します。旧 true は既存の選択アカウントだけへ移行し、全員を自動許可しません。[IPC モード](IPC-SECURITY.ja.md)を参照してください。Host 権限は独立です。
 
 [ドキュメント](README.ja.md)
 
@@ -115,4 +113,4 @@ node "<client>" apply-patch --instance "<id>" --epoch "<epoch>" --workspace "vsl
 
 所有する Host 一時ファイルへ保存し、close 時削除とアイドル期限を設け、commit 時だけ宛先を更新します。直前と同じアップロード番号／内容の重複は冪等です。通常変更を自動再送しません。commit 応答を失ったら対象状態とハッシュを確認してから再開を判断します。
 
-**大容量ダウンロードは本版では無効**です。`transferOpenRead/transferRead`（CLI download を含む）は Host 送信前に `feature_unavailable` を返します。約 1.1 MB の実ダウンロードで端末停止が繰り返され、原因は未解決です。小分け読み取りの反復で迂回しません。小容量読み取りと大容量アップロードは利用可能です。未対応の手順は skill に従い、具体的な手動結果やアクセス可能なコピーを依頼し、返答まで依存作業を保留します。
+大容量ダウンロード（`transferOpenRead/transferRead`、CLI download を含む）は `feature_unavailable` です。アクセス可能なコピーとローカルパスを依頼し、小分け読み取り反復や raw コマンドで迂回しません。小容量読み取りと大容量アップロードは利用できます。

@@ -1,63 +1,41 @@
-# 開發指南 v0.2
+# 開發指南
 
 [English](DEVELOPMENT.md) | [简体中文](DEVELOPMENT.zh-CN.md) | **繁體中文** | [日本語](DEVELOPMENT.ja.md)
 
-v0.2.2：**Configure IPC Access** 提供 ownerOnly（預設）、allLocalUsers 及穩定 SID 的 selectedUsers。舊 true 僅遷移既有指定帳戶，不自動允許全部帳戶。見 [IPC 三模式](IPC-SECURITY.zh-TW.md)，Host 權限獨立。
-
-[文件](README.zh-TW.md)
-
-## 環境
-
-使用 Windows、Node.js 和已確認的 Python 3 可執行檔案。擴充套件使用 Node 內置模塊和 Windows PowerShell；Host 記憶體執行階段由 PowerShell 編譯 C#。建置只使用 Python 標準函式庫，不需要安裝 npm 依賴。
-
-## 原始碼布局
+需要 Windows、Node.js 與確認的 Python 3。執行使用內建模組、Windows PowerShell 及隨包 C# 原始碼，打包僅 Python 標準函式庫，不需安裝相依。
 
 ```text
-extension/                    Extension, CLI, and tests
-skills/liveshare-workspace-bridge/    Codex skill and self-contained client
-scripts/build.py              Synchronization, packaging, and package checks
-docs/                         User and contributor documentation
-dist/                         Generated packages and SHA-256 files
-.local/                       Local-only working files
+extension/                         Runtime, CLI and tests
+skills/liveshare-workspace-bridge/  Skill and self-contained client
+scripts/build.py                   Packaging and source checks
+docs/                              Current product/contributor guides
+dist/                              Ignored generated packages
+.local/                            Ignored local working files
 ```
 
-`extension/cli.cjs` 是唯一規范客戶端；建置同步到 skill。接口變化必須同步 API 和各語言文件。skill 指令與引用只維護英文，不在 skill 目錄添加語言副本。
-
-## 檢查與建置
+extension/cli.cjs 為標準客戶端，建置同步 skill 副本。保持版本、API 欄位與譯文一致；skill 指令／參照只維護英文。
 
 ```powershell
 npm test
 npm run check
-
 $pythonExe = '<path-to-python.exe>'
-& $pythonExe .\scripts\build.py --check
-```
-
-測試覆蓋編輯預檢、部分儲存失敗、dirty 保護、實時權限依賴、補丁路徑、過期模型保護、真實 Windows IPC、Host 位元組基礎操作、有界輸出、取消和處理程序清理。普通測試不修改已連線的 Live Share 專案。
-
-```powershell
 & $pythonExe .\scripts\build.py
+& $pythonExe .\scripts\build.py --check
 & $pythonExe .\scripts\build.py --verify
 ```
 
-`dist/` 輸出 VSIX、自足式 skill ZIP 和 SHA-256 檔案。`--check` 只檢查布局、版本和客戶端同步；`--verify` 只對比現有包成員、原始碼與校驗和。包包含多語言讀者文件和驗收記錄。
+一般測試驗證文件／儲存／權限／IPC 契約，不修改已連線專案。本機成功不代表所有 Host、帳戶、策略、遠端或語言提供者可用。
 
-## 實際 Live Share 驗證
+建置產生 VSIX、skill ZIP 與 SHA-256；--check 驗證布局／版本／同步，--verify 對比套件與原始碼。明確文件白名單排除歷史驗收、issues、.local、私有 memo。
 
-`extension/test/live-v01.cjs` 是顯式啟用的舊版集成測試；僅在授權的連線和隔離測試範圍內設定 `LIVESHARE_RUN_LIVE=1` 執行。它創建並清理唯一目錄、將本機回報紀錄儲存到 `.local/evidence/`，還會改變搜尋視圖。不要加入預設測試或 CI。
-
-v0.2 Host 驗證需要專用 RW 共用 PowerShell 和自有唯一測試目錄。臨時設定必須記錄原值並復原，不能覆蓋使用者同時做出的更改。終端權限關閉時所有 Host 功能必須被拒絕，不能退回 Guest 終端。測試不 stage/commit/push。37 項本機測試通過不代表實際大檔案下載通過；分項證據和未完成驗收見[驗收記錄](VALIDATION-v0.2.zh-TW.md)。
-
-## 文件與倉庫衛生
-
-英文無語言後綴，翻譯使用 `.zh-CN`、`.zh-TW`、`.ja`，對應頁面互鏈。保持命令、API 字段、數值限制、權限預設值和失敗邊界一致；不要翻譯實際設定名稱或 API 標識符。翻譯更新後檢查鏈接與程式碼示例，並重新建置驗證包。
-
-`dist/`、`.local/`、依賴和本機組態不進 Git。不要提交 token、本機回報紀錄、使用者目錄或 Host 原始路徑。`.github/workflows/ci.yml` 在 Windows 上檢查和建置，不發佈。驗收文件只記錄可分享的結果，不包含私有回報紀錄內容。
-
-明確啟用的本機沙箱 IPC 驗收：僅既有帳戶、初始化自有暫存工作區，不發 Host 命令。
+真實測試需要明確範圍、自有唯一目錄與清理。live-v01.cjs 要求 LIVESHARE_RUN_LIVE=1 且改變搜尋視圖；live-sandbox.cjs 只用既有本機帳戶，可能初始化自有暫存工作區 ACL，不發 Host 命令。均非一般 CI。
 
 ```powershell
 $env:LIVESHARE_RUN_SANDBOX = '1'
 $env:LIVESHARE_CODEX_EXE = '<absolute-path-to-codex.exe>'
 node .\extension\test\live-sandbox.cjs
 ```
+
+Host 測試固定目標 RW 共用 PowerShell／根／epoch；還原設定不覆寫並行使用者變更。terminal 關閉必須拒絕 Host，不退回 Guest，不隱含 stage／commit／push。
+
+四語文件連結、命令、限制要一致，修改後檢查引用與套件。公開文件／包不可放機器回報、憑證、Host 原始路徑或調查敘述。生成／本機檔案已忽略，Windows CI 只驗證建置不發佈。

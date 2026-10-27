@@ -1,8 +1,6 @@
-# 架構 v0.2
+# 架構
 
 [English](ARCHITECTURE.md) | [简体中文](ARCHITECTURE.zh-CN.md) | **繁體中文** | [日本語](ARCHITECTURE.ja.md)
-
-v0.2.2：**Configure IPC Access** 提供 ownerOnly（預設）、allLocalUsers 及穩定 SID 的 selectedUsers。舊 true 僅遷移既有指定帳戶，不自動允許全部帳戶。見 [IPC 三模式](IPC-SECURITY.zh-TW.md)，Host 權限獨立。
 
 [文件](README.zh-TW.md)
 
@@ -28,8 +26,8 @@ v0.2.2：**Configure IPC Access** 提供 ownerOnly（預設）、allLocalUsers �
 
 Host 寫入可能早於 Guest 刷新。擴充套件僅核對受影響的已打開文件，內容未匹配或緩衝區變臟時保留並報錯；不全域還原。skill 請求使用者協助處理持續衝突和其他未支援步驟，等待確認後再繼續依賴工作。
 
-大檔案下載在實際終端測試中多次停頓，本版以 `feature_unavailable` 停用，不允許迴圈小塊讀取繞過。小檔案位元組讀和大檔案上傳仍可用。輸出節流只通過本機測試，不能視為下載問題已修復。見[驗收記錄](VALIDATION-v0.2.zh-TW.md)。
-
 `pipe-security.cs` / `pipe-host.ps1`: 明確 owner／沙箱 DACL、本機與工作階段門檻、持續單執行個體管道、有界 UTF-8 輸入和回應排空。
 
 `local-accounts.cs` 僅列舉本機 SAM 使用者並依穩定 SID 選擇；`ipc-access.cjs` 管理 User 模式、一次舊 SID 遷移及英文帳戶選擇器。
+
+大檔案下載（`transferOpenRead`／`transferRead`，含 CLI download）回傳 `feature_unavailable`。請使用者提供可存取副本與本機路徑，不反覆小塊讀取或用原始命令繞過；小檔案位元組讀取與大檔案上傳仍可用。
