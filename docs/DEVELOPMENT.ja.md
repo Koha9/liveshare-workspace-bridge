@@ -24,6 +24,8 @@ $pythonExe = '<path-to-python.exe>'
 & $pythonExe .\scripts\build.py --verify
 ```
 
+リポジトリ直下の入口は Windows で `./build.ps1` または `build.bat`、Unix／Git Bash で `sh ./build.sh` です。引数なしで `dist/` の VSIX、skill ZIP、SHA-256 を作成・検証し、`--check`、`--verify`、`--help` は `scripts/build.py` へ渡します。`LSWB_PYTHON` に Python 3 実行ファイルの絶対パスを指定できます。Windows は有効な Conda、ユーザーの Anaconda、Python Launcher、Unix は有効な Conda または Python 3 を選びます。別のカレントディレクトリからも呼び出せます。
+
 通常テストは文書／保存／権限／IPC 契約を検査し、接続プロジェクトを変更しません。ローカル成功は全 Host、アカウント、ポリシー、遠隔、言語サービスの保証ではありません。
 
 VSIX、skill ZIP、SHA-256 を生成します。--check は構成／版／同期、--verify は正確なソースメンバーを照合します。文書 whitelist は過去の受け入れ、issues、.local、私有 memo を除外します。

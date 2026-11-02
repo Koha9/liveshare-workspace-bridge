@@ -31,4 +31,7 @@ test('revoking a permission detaches output capture and never replays a sent act
  await new Promise(resolve=>setTimeout(resolve,10));f.settings['permissions.search']=false;f.host.changed(false);
  await assert.rejects(task,{code:'host_access_revoked'});assert.equal(f.sent.length,2);assert.equal(f.listeners.size,0);
  f.settings['permissions.search']=true;await assert.rejects(f.host.request(f.root,'search',{action:'search',query:'x'}),{code:'host_channel_uncertain'});assert.equal(f.sent.length,2);
+ // Restart invalidates the workspace binding; it must not acknowledge recovery.
+ f.host.changed(true);f.bump();
+ await assert.rejects(f.host.request(f.root,'search',{action:'search',query:'x'}),{code:'host_channel_uncertain'});assert.equal(f.sent.length,2);
 });

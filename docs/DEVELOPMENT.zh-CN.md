@@ -24,6 +24,8 @@ $pythonExe = '<path-to-python.exe>'
 & $pythonExe .\scripts\build.py --verify
 ```
 
+仓库根目录提供打包入口：Windows 使用 `./build.ps1` 或 `build.bat`，Unix／Git Bash 使用 `sh ./build.sh`。无参数时构建并校验 `dist/` 中的 VSIX、skill ZIP 和 SHA-256 文件；`--check`、`--verify`、`--help` 原样传给 `scripts/build.py`。可用 `LSWB_PYTHON` 指定 Python 3 可执行文件完整路径；Windows 自动选择当前 Conda、用户 Anaconda 或 Python Launcher，Unix 使用当前 Conda 或 Python 3。入口支持从其他当前目录调用。
+
 常规测试覆盖文档／保存／权限／IPC 契约，不修改已连接项目。本地通过不代表所有 Host、账号、策略、远端会话或语言提供者可用。
 
 构建生成 VSIX、skill ZIP 和 SHA-256。--check 验证布局／版本／客户端同步，--verify 对比包与源码精确成员。读者文档采用明确白名单，不包含历史验收、issues、.local 或私有 memo。

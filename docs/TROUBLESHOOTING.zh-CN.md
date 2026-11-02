@@ -10,6 +10,14 @@
 
 打开 **Live Share Workspace Bridge: Configure Agent Permissions**。agent 默认开启，共享终端默认关闭；检查配置权限和有效权限。开关由用户控制，agent 不自行启用来绕过拒绝。更改只阻止新工作，不撤销已派发副作用。
 
+## 运行中断连与恢复
+
+0.2.4 修复 broken pipe 清理：客户端超时断开后，迟到响应写入失败可能令 IsConnected 变为 false，原代码跳过 Disconnect，监听循环持续失败。现在会隔离 writer 清理异常、断开 broken 连接，并在监听器故障时退出而非空转。真实 Windows 管道测试已覆盖此场景；尚未确认窗口失焦是触发原因。
+
+已 ready 的 IPC helper 意外退出后，按 1／2／4 秒退避重启，连续不稳定时最多三次；稳定 ready 一分钟后重置次数。无需焦点事件或 Host 轮询。启动、策略、权限失败及显式 Stop 不自动重启。自动恢复保留 instance/epoch、Host 任务和不确定状态，串行处理仍在执行的请求，绝不重放已发送操作。
+
+仍断连时先运行一次 diagnose。任务已授权恢复连接时，agent 可在目标 Guest 窗口的命令面板直接执行 **Live Share Workspace Bridge: Restart Connection**（`liveshareWorkspaceBridge.restart`）；按 Ctrl+Shift+P，或 Ctrl+P 后输入 `>`。没有可用 UI 工具时只请求用户执行一次。手动重启改变 instance/epoch，使 Host 任务／传输句柄失效，之后按根名称和完整 URI 重新发现一次。Host 不确定状态仍保留，确认 Host 恢复后才能 acknowledgeRecovery。不可用重启绕过权限、策略或主动 Stop，也不可重放结果未知的修改。IPC 恢复不会重新加入 Live Share 或修复缺失的 Host 终端。
+
 ## Host 终端缺失或无响应
 
 Host 功能需要已连接的共享 RW Windows PowerShell，普通 Guest 终端不合格。缺少时 skill 只请求用户开启并共享一次，然后等待；多个候选需要准确名称，不猜测或逐个尝试，不切换执行路线。用户确认后验证一次，仍失败就报告并等待，不反复提示或轮询。

@@ -98,9 +98,16 @@ function records() {
 }
 async function discover(options = {}) {
   const inspected = inspectRecords(options), found = [], probes = [], probe = options.probe || request;
-  for (const entry of inspected.records) {
+  // Probe independent windows in bounded batches; a stale record must not add
+  // its full timeout serially for every window. Preserve registry result order.
+  for (let offset = 0; offset < inspected.records.length; offset += 4) {
+    const batch = await Promise.all(inspected.records.slice(offset, offset + 4).map(async entry => {
+      try { return { entry, response: await probe(entry, { op: 'info', instance: entry.id }, options.timeoutMs || 2000) }; }
+      catch (error) { return { entry, error }; }
+    }));
+    for (const { entry, response, error } of batch) {
     try {
-      const response = await probe(entry, { op: 'info', instance: entry.id }, options.timeoutMs || 2000);
+      if (error) throw error;
       if (!response.ok || response.result?.id !== entry.id || !Array.isArray(response.result?.roots)) {
         probes.push({ id: entry.id, status: 'invalid_response', code: response.error?.code || 'instance_identity_mismatch' }); continue;
       }
@@ -108,6 +115,7 @@ async function discover(options = {}) {
       probes.push({ id: entry.id, status: 'connected', rootCount: response.result.roots.length });
     } catch (err) {
       probes.push({ id: entry.id, status: ['EPERM','EACCES'].includes(err.transportCode || err.code) ? 'denied' : err.transportCode === 'ENOENT' ? 'stale' : 'unreachable', code: err.code || 'probe_failed', ...(err.transportCode ? { transportCode: err.transportCode } : {}), ...(err.requestSent !== undefined ? { requestSent: err.requestSent } : {}) });
+    }
     }
   }
   const denied = inspected.registry.status === 'denied' || inspected.issues.some(x => ['EPERM','EACCES'].includes(x.code)) || probes.some(x => x.status === 'denied');
@@ -203,5 +211,5 @@ async function main() {
   process.stdout.write(JSON.stringify(response, null, 2) + '\n');
   if (unsuccessful(response,body.op)) process.exitCode = 1;
 }
-if (require.main === module) main().catch(err => { process.stdout.write(JSON.stringify({ ok: false, error: { code: err.code || 'client_error', message: err.message, ...(err.details !== undefined ? { details: err.details } : {}), ...(err.requestSent !== undefined ? { requestSent: err.requestSent } : {}) } }, null, 2) + '\n'); process.exitCode = 1; });
+if (require.main === module) main().catch(err => { process.stdout.write(JSON.stringify({ ok: false, error: { code: err.code || 'client_error', message: err.message, ...(err.details !== undefined ? { details: err.details } : {}), ...(err.transportCode ? { transportCode: err.transportCode } : {}), ...(err.requestSent !== undefined ? { requestSent: err.requestSent } : {}) } }, null, 2) + '\n'); process.exitCode = 1; });
 module.exports = { request, instances, records, inspectRecords, discover, diagnosticReport, unsuccessful, transferClient, projectStartupRecord, readStartupDiagnostics };

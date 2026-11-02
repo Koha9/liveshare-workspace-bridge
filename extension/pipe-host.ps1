@@ -25,9 +25,10 @@ function Wait-Task($Task, [int]$TimeoutMs) {
     }
 }
 while ($true) {
-    $reader = $null; $writer = $null
+    $reader = $null; $writer = $null; $connected = $false
     try {
         Wait-Task ($pipe.WaitForConnectionAsync()) 0
+        $connected = $true
         $writer = [IO.StreamWriter]::new($pipe, $utf8, 4096, $true)
         $writer.AutoFlush = $true
         if (-not $localPipe.ClientIsInSession()) {
@@ -50,10 +51,15 @@ while ($true) {
         if (-not $localPipe.Drain(2000)) { [Console]::Error.WriteLine('pipe_client_drain_timeout') }
     } catch {
         [Console]::Error.WriteLine('pipe_connection_failed: ' + $_.Exception.GetType().Name)
+        # A listener failure is fatal. Let the extension recover instead of
+        # spinning on a broken server handle with no client to disconnect.
+        if (-not $connected) { exit 1 }
     } finally {
-        if ($null -ne $writer) { $writer.Dispose() }
-        if ($null -ne $reader) { $reader.Dispose() }
+        # Dispose flushes the writer and can throw after a client disconnects.
+        # A broken client must not skip Disconnect or terminate the listener.
+        if ($null -ne $writer) { try { $writer.Dispose() } catch { [Console]::Error.WriteLine('pipe_writer_cleanup_failed') } }
+        if ($null -ne $reader) { try { $reader.Dispose() } catch { [Console]::Error.WriteLine('pipe_reader_cleanup_failed') } }
         # Hold the sole server handle for the helper's lifetime; no re-creation gap.
-        try { $localPipe.Disconnect() } catch { [Console]::Error.WriteLine('pipe_disconnect_failed'); exit 1 }
+        if ($connected) { try { $localPipe.Disconnect() } catch { [Console]::Error.WriteLine('pipe_disconnect_failed'); exit 1 } }
     }
 }

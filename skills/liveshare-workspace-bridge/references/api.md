@@ -1,6 +1,6 @@
 # API reference
 
-This reference describes client/extension 0.2.3. For a different installation, check info.version and info.operations; unavailable fields remain unknown. Operation permissions update live, while IPC trust/migration restarts the bridge.
+This reference describes client/extension 0.2.4. For a different installation, check info.version and info.operations; unavailable fields remain unknown. Operation permissions update live, while IPC trust/migration restarts the bridge.
 
 Requests use op, instance, epoch and exact workspace URI. CLI flags can supply the binding fields. Shared paths are relative to the selected root. Replies are `{ok:true,result:...}` or `{ok:false,error:{code,message,details?}}`; still inspect applied/saved, per-file results, complete, truncation, state and exit codes.
 
@@ -49,6 +49,8 @@ Status sends no command. Binding verifies an owned temporary Guest bootstrap fil
 ```
 
 Reads return buffered text/version/dirty/EOL/lineCount. Lines are 1-based and inclusive. withHash:true adds a document text hash, not raw Host bytes. Single text return limit is 1 MiB; opening can still access a complete provider resource.
+
+readMany returns `result.files` entries shaped as `{path,ok:true,result:{...}}` or `{path,ok:false,error:{...}}`. Partial failure may leave the reply's top-level `ok:true`, while the CLI exits 1. Parse its JSON output even on a nonzero exit, retain successful entries, and resolve only failed items; a shell failure branch must not discard the receipt.
 
 edit.files allows 100 distinct targets, 1000 changes/file. oldText must be unique unless all:true. All positions reference original content, without overlap. Line edits use startLine/endLine/newText/expectedText?, selecting lines without the last separator. Native range fields use 0-based lines and UTF-16 characters, end-exclusive, with version/hash/expectedText protection. Full write requires expectedVersion or expectedHash.
 
