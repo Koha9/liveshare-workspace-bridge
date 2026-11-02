@@ -41,3 +41,9 @@ node .\extension\test\live-sandbox.cjs
 Host テストは対象 RW 端末／root／epoch を固定し、設定復元で同時ユーザー変更を上書きしません。端末無効は Host を拒否し Guest へ代替しません。stage/commit/push を暗黙実行しません。
 
 四言語のリンク／コマンド／上限を一致させ、変更後に参照とパッケージを検査します。機械固有記録、資格情報、Host 生パス、調査経過を公開文書／包へ入れません。生成／ローカルファイルは対象外で、Windows CI は公開しません。
+
+## Marketplace 公開
+
+`publish-marketplace.yml` は GitHub Actions OIDC と `@vscode/vsce` 4.1.0 で安定版を公開し、PAT secret は不要です。Marketplace 発行者 `Koha9-Lee` の Trusted Publishing ポリシーで owner `Koha9`、repository `liveshare-workspace-bridge`、workflow `publish-marketplace.yml` を指定し、Environment は空欄にします。[公式設定手順](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#publish-with-github-actions-and-trusted-publishing)を参照してください。
+
+安定版 GitHub Release の公開で起動します。既存版を公開する場合は Actions の **Publish Marketplace** で `main` と既存タグ（例 `v0.2.4`）を選びます。そのタグをチェックアウトし、版、テスト、パッケージを検査して VSIX を構築・検証後に公開します。このジョブだけが `id-token: write` を持ち、トークン交換失敗時に PAT へ切り替えません。公開失敗時は実行結果と Marketplace の公開版を確認してから再試行を判断し、既存版のタグを移動して内容を置き換えません。

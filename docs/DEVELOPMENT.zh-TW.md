@@ -41,3 +41,9 @@ node .\extension\test\live-sandbox.cjs
 Host 測試固定目標 RW 共用 PowerShell／根／epoch；還原設定不覆寫並行使用者變更。terminal 關閉必須拒絕 Host，不退回 Guest，不隱含 stage／commit／push。
 
 四語文件連結、命令、限制要一致，修改後檢查引用與套件。公開文件／包不可放機器回報、憑證、Host 原始路徑或調查敘述。生成／本機檔案已忽略，Windows CI 只驗證建置不發佈。
+
+## Marketplace 發佈
+
+`publish-marketplace.yml` 使用 GitHub Actions OIDC 與 `@vscode/vsce` 4.1.0 發佈正式版，不需 PAT secret。在 Marketplace 發佈者 `Koha9-Lee` 建立 Trusted Publishing 原則：owner `Koha9`、repository `liveshare-workspace-bridge`、workflow `publish-marketplace.yml`，Environment 留空。參閱[官方設定說明](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#publish-with-github-actions-and-trusted-publishing)。
+
+發佈正式 GitHub Release 會觸發此工作流程。補發既有版本時，在 Actions 的 **Publish Marketplace** 選取 `main`，輸入既有標籤（如 `v0.2.4`）。流程簽出該標籤、核對版本、執行測試與打包檢查，建置驗證後發佈 VSIX。只有此工作授予 `id-token: write`；權杖交換失敗不會退回 PAT。發佈失敗時先檢查執行結果和 Marketplace 公開版本再決定重試，不移動既有版本標籤以取代內容。

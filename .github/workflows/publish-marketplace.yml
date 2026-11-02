@@ -1,0 +1,83 @@
+name: Publish Marketplace
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable release tag to publish
+        required: true
+        default: v0.2.4
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: marketplace-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.repository == 'Koha9/liveshare-workspace-bridge' &&
+      ((github.event_name == 'release' && !github.event.release.prerelease) ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.event.release.tag_name }}
+    steps:
+      - name: Validate stable release tag
+        shell: pwsh
+        run: |
+          if ($env:RELEASE_TAG -cnotmatch '^v\d+\.\d+\.\d+$') {
+            throw 'Use an existing stable release tag such as v0.2.4.'
+          }
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag || github.event.release.tag_name }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/setup-python@v7
+        id: python
+        with:
+          python-version: '3.13'
+      - name: Validate release version
+        shell: pwsh
+        run: |
+          $package = Get-Content extension/package.json -Raw | ConvertFrom-Json
+          if ($env:RELEASE_TAG -cne "v$($package.version)") {
+            throw 'Release tag and extension version differ.'
+          }
+          if ($package.publisher -cne 'Koha9-Lee') {
+            throw 'Unexpected Marketplace publisher.'
+          }
+      - run: npm test
+      - run: npm run check
+      - name: Check sources and package assets
+        shell: pwsh
+        run: |
+          & '${{ steps.python.outputs.python-path }}' scripts/build.py --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & '${{ steps.python.outputs.python-path }}' scripts/test_build.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build and verify release packages
+        shell: pwsh
+        run: |
+          & '${{ steps.python.outputs.python-path }}' scripts/build.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & '${{ steps.python.outputs.python-path }}' scripts/build.py --verify
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publish verified VSIX with Trusted Publishing
+        shell: pwsh
+        run: |
+          $version = $env:RELEASE_TAG.Substring(1)
+          npx --yes --package=@vscode/vsce@4.1.0 vsce publish --oidc --packagePath "dist/liveshare-workspace-bridge-$version.vsix"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
