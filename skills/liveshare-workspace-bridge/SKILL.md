@@ -2,12 +2,12 @@
 name: liveshare-workspace-bridge
 description: "Read, edit, search, and save a connected Windows VS Code Live Share Guest (vsls:) workspace through Live Share Workspace Bridge. Use for Live Share virtual projects; ordinary local-disk repositories use native tools. Optional Host operations require its verified Host channel."
 metadata:
-  version: "0.2.3"
+  version: "0.2.4"
 ---
 
 # Live Share Workspace Bridge
 
-Use the bundled client with the matching extension. This skill documents version 0.2.3; inspect the reported version/operations before relying on capabilities in a different installation.
+Prefer the bundled client and extension at the same version. This skill documents version 0.2.4. With another installed version, inspect its reported version/operations and effective permissions once, then use only capabilities supported by both; do not assume newer recovery behavior is available.
 
 ## Connect once
 
@@ -19,6 +19,18 @@ node "<skill-dir>/scripts/liveshare.cjs" --instance "<id>" --epoch "<epoch>" --w
 ```
 
 Match the project by root name and complete URI; retain instance/epoch/root and reuse them. Shared paths are root-relative with forward slashes. Local shell, rg and apply_patch cannot operate on vsls paths. Read applicable project instructions and only the relevant file ranges.
+
+With an explicit binding, send the requested operation directly; do not precede every call with instances, info or a root listing. Discovery probes at most four windows concurrently. Use readMany for independent relevant files and retain successful results when another item fails.
+
+Always parse the JSON receipt even when the CLI exits nonzero. In a partial readMany result, the top-level ok can be true while individual files fail and the CLI exits 1; keep successful files and handle only the failed items.
+
+## Recover a disconnected bridge
+
+Version 0.2.4 automatically restarts a previously ready local IPC helper after unexpected exit, with 1/2/4-second backoff and at most three unstable restarts. It does not require window focus. Transport-only recovery preserves instance/epoch, Host jobs and uncertainty; no operation is replayed. Initial startup failures and an explicit Stop do not auto-restart.
+
+If still unavailable, read [recovery](references/recovery.md) and run diagnose once. For a confirmed runtime disconnect, when connection recovery is within the user's task scope, the agent may directly invoke **Live Share Workspace Bridge: Restart Connection** (`liveshareWorkspaceBridge.restart`) in the intended VS Code Guest window through available computer-use tooling. Open the Command Palette with Ctrl+Shift+P (or Ctrl+P then `>`); select the exact command. No extra permission prompt is needed for already-authorized recovery. Do not guess a CLI execute-command flag or send the command through a Host terminal. If no supported UI route is available, ask the user once to run that command.
+
+After manual restart, rediscover once and reselect the same project by name and complete URI; instance/epoch change and Host job/transfer handles are invalidated. Restart does not clear Host uncertainty or authorize acknowledgeRecovery:true. Preserve unknown-outcome receipts and inspect the affected targets before any mutation retry. Recovery does not rejoin a disconnected Live Share session, restore a missing Host terminal, or bypass IPC/security permissions.
 
 ## Edit and save
 

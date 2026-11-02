@@ -31,3 +31,12 @@ test('connected window without a shared root and wrong server identity are separ
 test('registry inspection does not connect to a pipe or write records',()=>{
  const inspected=inspectRecords({fsImpl:disk({[a+'.json']:record(a),'ignore.txt':'ignored'})});assert.equal(inspected.records.length,1);assert.equal(inspected.registry.status,'ready');
 });
+test('discovery probes at most four windows concurrently and retains registry order', async () => {
+ const ids = Array.from({length:9},(_,i)=>`00000000-0000-4000-8000-${String(i+1).padStart(12,'0')}`);
+ let active=0, maximum=0;
+ const report=await discover({fsImpl:disk(Object.fromEntries(ids.map(id=>[id+'.json',record(id)]))),probe:async entry=>{
+  active++;maximum=Math.max(maximum,active);
+  await new Promise(resolve=>setImmediate(resolve));active--;return connected(entry.id);
+ }});
+ assert.equal(maximum,4);assert.deepEqual(report.instances.map(x=>x.id),ids);assert.deepEqual(report.probes.map(x=>x.id),ids);
+});

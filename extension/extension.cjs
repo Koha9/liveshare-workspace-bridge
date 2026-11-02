@@ -18,6 +18,7 @@ function activate(context) {
   const output = vscode.window.createOutputChannel('Live Share Workspace Bridge');
   const startup=createStartupJournal({directory:path.join(path.dirname(registry),'startup-diagnostics'),pid:process.pid,version,log:message=>output.appendLine(message)});
   let child = null, ready = false, disposed = false, epoch = 1, id, discovery, ipc, starting=false, generation=0, restartTimer;
+  let recoveryAttempts = 0, readyAt = 0, dispatchQueue = Promise.resolve();
   const fallbackState=new Map();
   const migrationState=context.globalState||{get:key=>fallbackState.get(key),update:async(key,value)=>{fallbackState.set(key,value)}};
   const powershellPath=()=>vscode.workspace.getConfiguration('liveshareWorkspaceBridge').get('powershell','')||path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
@@ -47,17 +48,20 @@ function activate(context) {
   function stop() {
     generation++;starting=false;clearTimeout(restartTimer);
     unregister(); ready = false;
-    api?.dispose();
+    // Keep Host uncertainty across an explicit restart; it is not an acknowledgement
+    // that a previously dispatched command finished. Invalidate its binding only.
+    api?.workspaceChanged();
     if (child) { child.kill(); child = null; }
     startup.stop();
     updateStatus();
   }
-  function start() {
+  function start(recover = false) {
     if (disposed || child || starting) return;
     starting=true;const token=++generation;
-    id = crypto.randomUUID(); discovery = path.join(registry, `${id}.json`);
+    if (!recover) { id = crypto.randomUUID(); recoveryAttempts = 0; }
+    discovery = path.join(registry, `${id}.json`);
     ipc = { mode: 'starting' };
-    api = createWorkspaceApi(vscode, { id, version, epoch: () => epoch, ipc: () => ipc });
+    api ||= createWorkspaceApi(vscode, { get id() { return id; }, version, epoch: () => epoch, ipc: () => ipc });
     const config=vscode.workspace.getConfiguration('liveshareWorkspaceBridge'),powershell=powershellPath();
     startup.begin(id,epoch,powershell);
     prepareAccess(config,migrationState,()=>listLocalUsers(powershell),vscode.ConfigurationTarget?.Global).then(access=>{
@@ -71,22 +75,53 @@ function activate(context) {
     let runtimeStderrNoted=false;
     current.on('error', err => {if(token===generation){startup.spawnError(err.code);updateStatus();}});
     current.stdin.on('error', err => output.appendLine(`IPC response delivery failed: ${err.code}. An operation may have completed without delivery.`));
-    current.on('close', () => {if(token!==generation)return;stderrCapture.end();if (child === current) {unregister();ready=false;child=null;startup.exited();updateStatus();} });
+    current.on('close', () => {
+      if (token !== generation) return;
+      stderrCapture.end();
+      if (child !== current) return;
+      const wasReady = ready;
+      unregister(); ready = false; child = null; startup.exited();
+      // Recover only a helper that actually reached ready. Startup/security errors
+      // need diagnosis, not an endless process loop. Stop/dispose invalidate token.
+      if (wasReady && !disposed) {
+        if (Date.now() - readyAt >= 60000) recoveryAttempts = 0;
+        if (recoveryAttempts < 3) {
+          const delay = 1000 * 2 ** recoveryAttempts++;
+          output.appendLine(`Local IPC helper exited; reconnecting in ${delay} ms (attempt ${recoveryAttempts}/3). Sent requests are not replayed.`);
+          restartTimer = setTimeout(() => { if (token === generation) start(true); }, delay);
+        } else output.appendLine('Local IPC recovery paused after three unstable restarts. Run Show Startup Diagnostics, then Restart Connection when appropriate.');
+      }
+      updateStatus();
+    });
     current.stderr.on('data', chunk => {if(token!==generation)return;if(!ready)stderrCapture.write(chunk);else if(!runtimeStderrNoted){runtimeStderrNoted=true;output.appendLine('Guest local IPC helper stderr observed after ready; raw content omitted. This is not classified as a startup failure.');}});
     readline.createInterface({ input: current.stdout }).on('line', async line => {
+      if (token !== generation || child !== current) return;
       let frame;
       try { frame = JSON.parse(line); } catch { output.appendLine('Invalid IPC host frame.'); return; }
       if (frame.kind === 'ready') {
         if (child !== current) return;
-        stderrCapture.end();startup.ready(frame.shell);ipc = {...frame.ipc,migratedLegacy:access.migratedLegacy===true}; ready = true; publish();updateStatus(); output.appendLine(`v${version}: local IPC ready (${['ownerOnly','allLocalUsers','selectedUsers'].includes(ipc?.mode)?ipc.mode:'unknown'}).`); return;
+        stderrCapture.end();startup.ready(frame.shell);ipc = {...frame.ipc,migratedLegacy:access.migratedLegacy===true}; ready = true; readyAt = Date.now(); publish();updateStatus(); output.appendLine(`v${version}: local IPC ready (${['ownerOnly','allLocalUsers','selectedUsers'].includes(ipc?.mode)?ipc.mode:'unknown'}).`); return;
       }
       if (frame.kind !== 'request') return;
       let response;
-      try { response = { ok: true, result: await currentApi.dispatch(frame.body) }; }
+      try {
+        // Retain serialization across helper replacement, including a request
+        // still running after its client's transport has disappeared.
+        const dispatch = () => {
+          if (token !== generation || child !== current) throw Object.assign(new Error('IPC connection was replaced before dispatch.'), { code: 'transport_unavailable' });
+          return currentApi.dispatch(frame.body);
+        };
+        // Info only reports local state: discovery must remain usable while an
+        // old provider request is finishing. All workspace work stays queued.
+        const info = frame.body?.op === 'info';
+        const work = (info ? Promise.resolve() : dispatchQueue).then(dispatch);
+        if (!info) dispatchQueue = work.catch(() => {});
+        response = { ok: true, result: await work };
+      }
       catch (err) { response = { ok: false, error: { code: err.code || 'vscode_error', message: err.message, ...(err.details ? { details: err.details } : {}) } }; }
       let encoded = JSON.stringify(response);
       if (Buffer.byteLength(encoded, 'utf8') > MAX_RESPONSE) encoded = JSON.stringify({ ok: false, error: { code: 'response_limit', message: 'Response exceeds 4 MiB. Request smaller ranges or fewer files.' } });
-      if (!current.killed && current.stdin.writable) current.stdin.write(encoded + '\n');
+      if (token === generation && child === current && !current.killed && current.stdin.writable) current.stdin.write(encoded + '\n');
     });
     }).catch(error=>{if(token===generation){starting=false;startup.setupError(error);updateStatus();}});
   }
@@ -99,7 +134,7 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspaceBridge.configureAccess',async()=>{try{await configureAccess(vscode,()=>listLocalUsers(powershellPath()));}catch(error){await vscode.window.showErrorMessage('IPC access configuration failed: '+error.message);}}));
   context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspaceBridge.restart', () => { stop(); epoch++; start(); }));
   context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspaceBridge.stop', () => { stop(); output.appendLine('Stopped by command.'); }));
-  context.subscriptions.push({ dispose() { disposed = true; stop();startup.dispose(); } });
+  context.subscriptions.push({ dispose() { disposed = true; stop();api?.dispose();startup.dispose(); } });
   start(); // Also supports joining Live Share after this extension has activated.
   updateStatus();
 }

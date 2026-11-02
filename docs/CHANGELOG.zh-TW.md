@@ -2,6 +2,8 @@
 
 [English](CHANGELOG.md) | [简体中文](CHANGELOG.zh-CN.md) | **繁體中文** | [日本語](CHANGELOG.ja.md)
 
+- 0.2.4 — 修正 broken pipe 清理，加入有限自動重連，保留 Host 不確定狀態，並行探索及 agent 重啟指引。
+
 - 0.2.3 — 本機啟動摘要、安全 shell 資料及目前／歷史區分。
 
 - 0.2.2 — 擁有者／本機使用者／指定 SID 與舊設定遷移。

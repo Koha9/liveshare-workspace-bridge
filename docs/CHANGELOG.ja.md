@@ -2,6 +2,8 @@
 
 [English](CHANGELOG.md) | [简体中文](CHANGELOG.zh-CN.md) | [繁體中文](CHANGELOG.zh-TW.md) | **日本語**
 
+- 0.2.4 — broken pipe 後処理、回数制限付き自動再接続、Host 結果不明状態の保持、並列検出と agent 再起動手順。
+
 - 0.2.3 — ローカル起動要約、安全な shell 情報、現在と履歴の区別。
 
 - 0.2.2 — 所有者／ローカル／選択 SID と旧設定移行。

@@ -24,6 +24,8 @@ $pythonExe = '<path-to-python.exe>'
 & $pythonExe .\scripts\build.py --verify
 ```
 
+Packaging shortcuts at the repository root: `./build.ps1` or `build.bat` on Windows; `sh ./build.sh` on Unix or Git Bash. With no arguments they build and verify the VSIX, skill ZIP and SHA-256 files in `dist/`; `--check`, `--verify` and `--help` are forwarded to `scripts/build.py`. Set `LSWB_PYTHON` to a full Python 3 executable path when needed. Windows detects active Conda, user Anaconda or the Python Launcher; Unix uses active Conda or Python 3. These entrypoints also work from another current directory.
+
 Normal tests cover document/save/permission/IPC contracts without changing a connected project. A passing local suite is not proof that every Host, account, policy, remote session or language provider works.
 
 The build creates VSIX/skill ZIP and SHA-256 files. --check validates layout/version/client sync; --verify compares current packages to exact source members. The explicit reader whitelist excludes historical acceptance documents, issues, .local and private memo.

@@ -89,7 +89,9 @@ namespace LswbIpcV022 {
     }
     public void Disconnect() {
       CancelIoEx(Stream.SafePipeHandle,IntPtr.Zero);
-      if(Stream.IsConnected)Stream.Disconnect();
+      // Called after a successful WaitForConnection, even when a failed write
+      // has changed the stream to Broken (IsConnected is then false).
+      Stream.Disconnect();
     }
     public void Dispose() { Stream.Dispose(); }
   }

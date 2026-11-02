@@ -63,6 +63,12 @@ test('owner-only local pipe preserves rapid UTF-8 replies, bounds input and neve
   assert.equal((await request({pipeName},{op:'afterInvalid'})).ok,true,'Rejected clients must not break the persistent server.');
   await assert.rejects(request({ pipeName }, { op: 'noReply' }, 200), { code: 'transport_outcome_unknown', requestSent: true });
   assert.equal(received.filter(x => x.op === 'noReply').length, 1, 'Uncertain requests must never be resent.');
+  // Deliver a late, buffered reply after the client has closed. Both WriteLine
+  // and Dispose may fail; the next client must still reach the same listener.
+  child.stdin.write(JSON.stringify({ ok: true, result: 'x'.repeat(65536) }) + '\n');
+  try {
+    assert.equal((await request({ pipeName }, { op: 'afterAbandonedReply' }, 3000)).result.op, 'afterAbandonedReply');
+  } catch (error) { error.message += `\nHelper diagnostics: ${errors.slice(-2000)}`; throw error; }
 });
 test('pipe helper exits when its owning process exits, including while waiting for a client', { skip: process.platform !== 'win32', timeout: 10000 }, async t => {
   const owner = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { windowsHide: true });

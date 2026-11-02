@@ -10,6 +10,14 @@ Live Share Guest ウィンドウの Profile に拡張を入れます。更新後
 
 **Live Share Workspace Bridge: Configure Agent Permissions** を開き、構成値と実効権限を確認します。agent は既定有効、共有端末は無効です。ユーザー管理の設定を agent が自分で有効にして拒否を迂回してはいけません。変更は新規作業を止め、送信済み効果を戻しません。
 
+## 実行中の切断と復旧
+
+0.2.4 は broken pipe の後処理を修正します。クライアントのタイムアウト後、遅延応答の書き込みに失敗すると IsConnected が false になり、従来は Disconnect を省略して待受ループが失敗し続ける場合がありました。writer の後処理例外を隔離し、broken 接続も切断し、待受自体の障害では空回りせず終了します。実際の Windows パイプテストで確認済みですが、フォーカス喪失が原因とは確認できていません。
+
+ready 到達後の IPC helper が終了すると、1／2／4 秒の待機で最大三回再起動します。ready が一分続くと回数をリセットします。フォーカスイベントや Host ポーリングは不要です。起動・ポリシー・権限の失敗、明示的な Stop は自動再起動しません。自動復旧は instance/epoch、Host ジョブと結果不明状態を保持し、実行中の要求を直列化して送信済み操作を再送しません。
+
+接続できなければ diagnose を一度実行します。タスクで復旧が許可されていれば、agent は対象 Guest ウィンドウのコマンドパレットで **Live Share Workspace Bridge: Restart Connection**（`liveshareWorkspaceBridge.restart`）を直接実行できます。Ctrl+Shift+P、または Ctrl+P の後に `>` を入力します。UI ツールがなければユーザーへ一度依頼します。手動再起動は instance/epoch を変更し、Host ジョブ／転送ハンドルを無効にするため、ルート名と完全な URI で一度再検出します。Host の結果不明状態は残り、Host 復旧確認後にのみ acknowledgeRecovery を使用します。権限・ポリシー・意図的な Stop の迂回や結果不明の変更の再送には使いません。IPC 復旧は Live Share への再参加や Host 端末の修復を行いません。
+
 ## Host 端末がない／応答しない
 
 接続済みの共有 RW Windows PowerShell が必要です。通常 Guest 端末は選びません。不在時は skill が一度だけ共有を依頼して待ちます。複数候補は正確な名前を指定し、推測や順番の試行、別経路への切り替えはしません。ユーザー確認後に一度検証し、失敗なら報告して待ち、再質問やポーリングを繰り返しません。
