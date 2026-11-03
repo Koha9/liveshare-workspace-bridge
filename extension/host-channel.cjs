@@ -8,7 +8,13 @@ function renderBootstrap() {
   const runtime = fs.readFileSync(path.join(__dirname, 'host-runtime.cs'), 'utf8');
   const namespace = 'LswbHost' + crypto.createHash('sha256').update(runtime).digest('hex').slice(0, 12);
   const rewritten = runtime.replaceAll('LswbHostV020', namespace);
-  return fs.readFileSync(path.join(__dirname, 'host-actions.ps1'), 'utf8').replaceAll('LswbHostV020', namespace).replace('__RUNTIME_BASE64__', Buffer.from(rewritten).toString('base64'));
+  const coreMarker = '#__LSWB_HOST_CORE__#';
+  const core = fs.readFileSync(path.join(__dirname, 'host-core.ps1'), 'utf8');
+  const actions = fs.readFileSync(path.join(__dirname, 'host-actions.ps1'), 'utf8');
+  if (!actions.includes(coreMarker)) throw new Error('host-actions.ps1 is missing the Host core marker.');
+  // A replacer function keeps PowerShell text such as $& or $' literal.
+  const inlined = actions.replace(coreMarker, () => core);
+  return inlined.replaceAll('LswbHostV020', namespace).replace('__RUNTIME_BASE64__', Buffer.from(rewritten).toString('base64'));
 }
 function createHostChannel(vscode, identity, permissions) {
   let binding = null, queue = Promise.resolve(), pending = null, uncertain = false, disposed = false;
