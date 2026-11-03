@@ -164,11 +164,13 @@ test('launcher breaks equal server mtimes by the newest discovery record', async
   assert.equal(result.stdout, 'new');
 });
 
-test('renderMcpConfig escapes Windows paths into valid snippets', () => {
-  const launcher = 'C:\\Users\\x y\\.liveshare-local\\mcp-server.cjs';
-  const text = renderMcpConfig(launcher);
+test('renderMcpConfig renders Windows paths with forward slashes into valid snippets', () => {
+  const windowsPath = 'C:\\Users\\x y\\.liveshare-local\\mcp-server.cjs';
+  const launcher = 'C:/Users/x y/.liveshare-local/mcp-server.cjs';
+  const text = renderMcpConfig(windowsPath);
+  assert.ok(!text.includes('\\'), 'snippets must not contain backslashes');
   const lines = text.split('\n');
-  assert.ok(lines.includes(`claude mcp add lswb -- node ${JSON.stringify(launcher)}`));
+  assert.ok(lines.includes(`claude mcp add lswb -- node "${launcher}"`));
   assert.ok(lines.includes('[mcp_servers.lswb]'));
   assert.ok(lines.includes('command = "node"'));
   const argsLine = lines.find(line => line.startsWith('args = '));

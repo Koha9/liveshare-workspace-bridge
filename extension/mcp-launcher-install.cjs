@@ -46,7 +46,14 @@ function installLauncher({ registryDir, sourcePath, log }) {
   }
 }
 
-function renderMcpConfig(launcher) {
+// Node accepts forward slashes on Windows; they avoid doubled backslashes in
+// the rendered JSON/TOML strings and in PowerShell.
+function toForwardSlashes(file) {
+  return file.replace(/\\/g, '/');
+}
+
+function renderMcpConfig(launcherFile) {
+  const launcher = toForwardSlashes(launcherFile);
   const quoted = JSON.stringify(launcher);
   const vscodeConfig = {
     servers: { lswb: { type: 'stdio', command: 'node', args: [launcher] } },
