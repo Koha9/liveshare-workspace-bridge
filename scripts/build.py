@@ -16,7 +16,34 @@ EXTENSION = ROOT / "extension"
 SKILL_NAME = "liveshare-workspace-bridge"
 SKILL = ROOT / "skills" / SKILL_NAME
 DIST = ROOT / "dist"
-RUNTIME_FILES = ("extension.cjs", "workspace.cjs", "core.cjs", "cli.cjs", "pipe-host.ps1", "pipe-security.cs", "local-accounts.cs", "ipc-access.cjs", "startup-diagnostics.cjs", "permissions.cjs", "host-channel.cjs", "host-bootstrap.cjs", "host-transport-terminal.cjs", "host-transport-tcp.cjs", "host-operations.cjs", "patch.cjs", "host-runtime.cs", "host-actions.ps1", "host-core.ps1", "host-server.ps1", "mcp-launcher.cjs", "mcp-launcher-install.cjs", "mcp-definition-provider.cjs")
+RUNTIME_FILES = (
+    "extension.cjs",
+    "workspace.cjs",
+    "core.cjs",
+    "cli.cjs",
+    "pipe-host.ps1",
+    "pipe-security.cs",
+    "local-accounts.cs",
+    "ipc-access.cjs",
+    "startup-diagnostics.cjs",
+    "permissions.cjs",
+    "host-channel.cjs",
+    "host-bootstrap.cjs",
+    "host-transport-terminal.cjs",
+    "host-transport-tcp.cjs",
+    "host-operations.cjs",
+    "patch.cjs",
+    "host-runtime.cs",
+    "host-actions.ps1",
+    "host-core.ps1",
+    "host-server.ps1",
+    "mcp-launcher.cjs",
+    "mcp-launcher-install.cjs",
+    "mcp-definition-provider.cjs",
+    "mcp-server.cjs",
+    "mcp-tools.cjs",
+)
+RELATIVE_REQUIRE = re.compile(r"""require\(\s*['"](\.\.?/[^'"]+)['"]\s*\)""")
 DOCUMENT_NAMES = ("README", "USAGE", "API", "ARCHITECTURE", "DEVELOPMENT", "TROUBLESHOOTING", "IPC-SECURITY", "STARTUP-DIAGNOSTICS", "CHANGELOG", "SETTINGS")
 LOCALES = ("", ".zh-CN", ".zh-TW", ".ja")
 SKILL_FILES = (
@@ -71,6 +98,34 @@ def marketplace_markdown(text: str, source: str, repository: str) -> str:
         relative = posixpath.normpath(posixpath.join(posixpath.dirname(source), target))
         return f"{match.group(1)}{repository}/blob/main/{relative}{match.group(3)}"
     return re.sub(r"(\]\()([^\s)]+)(\))", replace, text)
+
+
+def missing_requires(member: str, source: str, members: dict[str, bytes]) -> list[str]:
+    missing = []
+    directory = posixpath.dirname(member)
+    for target in RELATIVE_REQUIRE.findall(source):
+        resolved = posixpath.normpath(posixpath.join(directory, target))
+        if resolved not in members:
+            missing.append(f"{member} -> {target}")
+    return missing
+
+
+def check_relative_requires(members: dict[str, bytes]) -> None:
+    """Fail when a packaged extension/*.cjs requires a relative module that is not packaged.
+
+    Only literal require('./x') / require('../x') calls are checked. Resources loaded
+    through path.join(__dirname, ...) (the .ps1/.cs helpers, the MCP launcher source,
+    mcp-server.cjs as spawned by the launcher and definition provider) are not covered
+    here and must stay listed in RUNTIME_FILES.
+    """
+    missing = []
+    for member, data in sorted(members.items()):
+        is_runtime_module = member.startswith("extension/") and member.endswith(".cjs")
+        if not is_runtime_module:
+            continue
+        missing.extend(missing_requires(member, data.decode("utf-8"), members))
+    if missing:
+        raise ValueError("Packaged modules require missing files: " + "; ".join(missing))
 
 
 def package_members(package: dict) -> dict[str, dict[str, bytes]]:
@@ -134,6 +189,7 @@ def package_members(package: dict) -> dict[str, dict[str, bytes]]:
         "extension.vsixmanifest": manifest.encode("utf-8"),
         "[Content_Types].xml": content_types.encode("utf-8"),
     })
+    check_relative_requires(extension_members)
     skill_members = {f"{SKILL_NAME}/{name}": (SKILL / name).read_bytes() for name in SKILL_FILES}
     skill_members[f"{SKILL_NAME}/LICENSE"] = (ROOT / "LICENSE").read_bytes()
     return {

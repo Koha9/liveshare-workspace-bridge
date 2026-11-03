@@ -2,6 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
+- [MCP](MCP.md)
 - [USAGE](USAGE.md)
 - [API](API.md)
 - [IPC-SECURITY](IPC-SECURITY.md)

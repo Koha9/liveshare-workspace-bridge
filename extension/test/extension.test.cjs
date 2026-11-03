@@ -32,7 +32,7 @@ test('extension starts before joining, refreshes workspace epoch, restarts and r
   const launcher = path.join(localHome, '.liveshare-local', 'mcp-server.cjs');
   assert.deepEqual(fs.readFileSync(launcher), fs.readFileSync(path.join(__dirname, '..', 'mcp-launcher.cjs')));
   await commands.get('liveshareWorkspaceBridge.copyMcpConfig')();
-  assert.ok(bridgeOutput.join('').includes(JSON.stringify(launcher)));
+  assert.ok(bridgeOutput.join('').includes(JSON.stringify(launcher.replace(/\\/g, '/'))));
   async function ownRecord(except) {
     // PowerShell compiles the native IPC helper at startup. Shared Windows CI
     // runners can take longer than five seconds under parallel test load.

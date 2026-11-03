@@ -10,6 +10,10 @@
 - host-channel.cjs serializes shared-terminal actions, verifies a random bootstrap file, binds the Host root and frames responses with nonces and explicit end markers. Large payloads use an acknowledged no-echo console input path.
 - host-operations.cjs maps public APIs to narrow Host actions and binds jobs/transfers to root and epoch.
 - host-actions.ps1 loads an in-memory Host helper. host-runtime.cs provides owned Windows Job Objects, bounded stream draining, chunked byte handles, SHA-256 and expiry. No permanent Host agent or HTTP service is installed.
+- mcp-server.cjs is the stdio MCP protocol layer (initialize, tools/list, tools/call). It writes only protocol frames to stdout.
+- mcp-tools.cjs defines the MCP tool table. It maps Guest, Host and local-file tools onto bridge operations through the cli.cjs transport and keeps the root-uri-to-instance/epoch bindings. Unknown transport outcomes are reported, never replayed.
+- mcp-launcher.cjs is a self-contained launcher that the extension installs to `~/.liveshare-local/mcp-server.cjs` (via mcp-launcher-install.cjs, which also renders the Copy MCP Server Configuration snippets). It starts mcp-server.cjs from a live discovery record (newest server file first, then newest record), so agent configurations survive upgrades.
+- mcp-definition-provider.cjs registers mcp-server.cjs with VS Code (`vscode.lm.registerMcpServerDefinitionProvider`) so that the built-in agent discovers it.
 - cli.cjs is canonical and copied into the skill at build time; it supports JSON, patches and chunked uploads. Its retained download entry point is denied by the server capability gate in this release.
 
 The document path remains the default for text edits, without provider rereads after every save. The optional Host path handles complete saved-file search, commands, patches and byte/directory operations. Raw Host execution requires all operation permissions; narrow actions remain individually controllable. These checks are not an OS sandbox for arbitrary scripts.
