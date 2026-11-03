@@ -150,24 +150,73 @@ async function selected(body, options) {
   if(body.op!=='info'&&!base.workspace)throw new Error('Set workspace to an exact root URI returned by instances.');
   return {instance,base};
 }
+// Chunked upload over an already-bound call(body): begin, write x n, commit.
+// Any failure triggers a best-effort transferAbort; commit is never retried.
+// Shared by the CLI and the MCP adapter so both run the same transfer loop.
+function sourceChanged(initial, current, total) {
+  return current.size !== initial.size || current.mtimeMs !== initial.mtimeMs || total !== initial.size;
+}
+async function writeChunks(call, transferId, handle, chunkBytes, onProgress) {
+  const hash = crypto.createHash('sha256');
+  const buffer = Buffer.alloc(chunkBytes);
+  let total = 0;
+  let sequence = 0;
+  for (;;) {
+    const count = fs.readSync(handle, buffer, 0, buffer.length, null);
+    if (!count) break;
+    const chunk = buffer.subarray(0, count);
+    hash.update(chunk);
+    await call({ op: 'transferWrite', transferId, sequence, base64: chunk.toString('base64') });
+    sequence += 1;
+    total += count;
+    onProgress(total);
+  }
+  return { total, sha256: hash.digest('hex') };
+}
+async function uploadTransfer(call, options) {
+  const report = options.progress || (() => {});
+  let transferId;
+  let handle;
+  try {
+    handle = fs.openSync(options.input, 'r');
+    const initial = fs.fstatSync(handle);
+    if (!initial.isFile()) throw new Error('Upload input must be a file.');
+    const begin = await call({
+      op: 'transferBeginWrite',
+      path: options.path,
+      size: initial.size,
+      overwrite: options.overwrite === true,
+      expectedCurrentSha256: options.expectedCurrentSha256,
+    });
+    transferId = begin.transferId;
+    const onProgress = bytes => report(bytes, initial.size);
+    const { total, sha256 } = await writeChunks(call, transferId, handle, begin.chunkBytes, onProgress);
+    if (sourceChanged(initial, fs.fstatSync(handle), total)) throw new Error('Local upload source changed during transfer.');
+    const result = await call({ op: 'transferCommit', transferId, sha256 });
+    transferId = null;
+    if (result.sha256 !== sha256 || !result.written) throw new Error('Host upload acknowledgement failed integrity validation; inspect the target.');
+    return { ...result, path: options.path, bytes: total };
+  } finally {
+    if (handle !== undefined) fs.closeSync(handle);
+    if (transferId) {
+      try {
+        await call({ op: 'transferAbort', transferId });
+      } catch {}
+    }
+  }
+}
 async function transferClient(mode, options) {
   if(!options.path)throw new Error('--path is required.');
   const {instance,base}=await selected({op:mode},options);
-  let transferId, temporary, inputHandle;
+  let transferId, temporary;
   let lastProgress=0;
   const progress=(bytes,total)=>{if(options.progress&&(bytes===total||Date.now()-lastProgress>=1000)){lastProgress=Date.now();process.stderr.write(`${mode}: ${bytes}/${total} bytes\n`);}};
   const call=async body=>{const reply=await request(instance,{...base,...body});if(!reply.ok)throw Object.assign(new Error(reply.error.message),{code:reply.error.code,details:reply.error.details});return reply.result;};
   try {
     if(mode==='upload'){
       if(!options.input)throw new Error('--input is required.');
-      inputHandle=fs.openSync(options.input,'r');const initial=fs.fstatSync(inputHandle);if(!initial.isFile())throw new Error('Upload input must be a file.');
-      const begin=await call({op:'transferBeginWrite',path:options.path,size:initial.size,overwrite:options.overwrite===true,expectedCurrentSha256:options['expected-current-sha256']});transferId=begin.transferId;
-      const hash=crypto.createHash('sha256'), buffer=Buffer.alloc(begin.chunkBytes);let total=0,sequence=0;
-      for(;;){const count=fs.readSync(inputHandle,buffer,0,buffer.length,null);if(!count)break;hash.update(buffer.subarray(0,count));await call({op:'transferWrite',transferId,sequence:sequence++,base64:buffer.subarray(0,count).toString('base64')});total+=count;progress(total,initial.size);}
-      const current=fs.fstatSync(inputHandle);if(current.size!==initial.size||current.mtimeMs!==initial.mtimeMs||total!==initial.size)throw new Error('Local upload source changed during transfer.');
-      const sha256=hash.digest('hex');const result=await call({op:'transferCommit',transferId,sha256});transferId=null;
-      if(result.sha256!==sha256||!result.written)throw new Error('Host upload acknowledgement failed integrity validation; inspect the target.');
-      return {ok:true,result:{...result,path:options.path,bytes:total}};
+      const result=await uploadTransfer(call,{input:options.input,path:options.path,overwrite:options.overwrite===true,expectedCurrentSha256:options['expected-current-sha256'],progress});
+      return {ok:true,result};
     }
     if(!options.output)throw new Error('--output is required.');
     if(/^(?:vsls|file):/iu.test(options.output))throw new Error('Download output must be a local filesystem path.');
@@ -183,7 +232,6 @@ async function transferClient(mode, options) {
     else {fs.copyFileSync(temporary,output,fs.constants.COPYFILE_EXCL);fs.unlinkSync(temporary);}
     temporary=null;return {ok:true,result:{downloaded:true,path:options.path,output,bytes:total,sha256:verifiedSha256}};
   }finally{
-    if(inputHandle!==undefined)fs.closeSync(inputHandle);
     if(transferId)try{await call({op:'transferAbort',transferId});}catch{}
     if(temporary)try{fs.unlinkSync(temporary);}catch{}
   }
@@ -212,4 +260,4 @@ async function main() {
   if (unsuccessful(response,body.op)) process.exitCode = 1;
 }
 if (require.main === module) main().catch(err => { process.stdout.write(JSON.stringify({ ok: false, error: { code: err.code || 'client_error', message: err.message, ...(err.details !== undefined ? { details: err.details } : {}), ...(err.transportCode ? { transportCode: err.transportCode } : {}), ...(err.requestSent !== undefined ? { requestSent: err.requestSent } : {}) } }, null, 2) + '\n'); process.exitCode = 1; });
-module.exports = { request, instances, records, inspectRecords, discover, diagnosticReport, unsuccessful, transferClient, projectStartupRecord, readStartupDiagnostics };
+module.exports = { request, instances, records, inspectRecords, discover, diagnosticReport, unsuccessful, transferClient, uploadTransfer, projectStartupRecord, readStartupDiagnostics };

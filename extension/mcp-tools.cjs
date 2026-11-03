@@ -1,12 +1,15 @@
 'use strict';
 
 // MCP tool table for Live Share Workspace Bridge.
-// Guest-side tools map one-to-one onto workspace.cjs operations and reuse the
-// canonical cli.cjs transport. Permissions stay in the extension.
+// Guest-side tools map one-to-one onto workspace.cjs operations, Host-side tools
+// onto host-operations.cjs, and both reuse the canonical cli.cjs transport.
+// Permissions stay in the extension.
 // No request is ever retried or replayed here.
 
+const fs = require('node:fs');
 const os = require('node:os');
-const { discover, request } = require('./cli.cjs');
+const nodePath = require('node:path');
+const { discover, request, uploadTransfer } = require('./cli.cjs');
 const { version: SERVER_VERSION } = require('./package.json');
 
 const REQUEST_TIMEOUT_MS = 60000;
@@ -315,20 +318,48 @@ function checkArray(schema, value, path) {
   return null;
 }
 
+function matchesType(type, value) {
+  const check = TYPE_CHECKS[type];
+  return !check || check(value);
+}
+
+function article(type) {
+  return type === 'integer' ? 'an' : 'a';
+}
+
+// A schema type is either one name or a list of alternatives, e.g. ['string', 'array'].
+function typeProblem(schema, value, path) {
+  if (schema.type === undefined) {
+    return null;
+  }
+  const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+  if (types.some(type => matchesType(type, value))) {
+    return null;
+  }
+  if (types.length === 1) {
+    return `${label(path)} must be ${article(types[0])} ${types[0]}.`;
+  }
+  return `${label(path)} must be a ${types.join(' or ')}.`;
+}
+
+function hasType(schema, type) {
+  return Array.isArray(schema.type) ? schema.type.includes(type) : schema.type === type;
+}
+
 // Returns a specific error string, or null when value matches the schema.
 // Deep semantics (versions, ranges, limits) are left to the extension.
 function validateAgainstSchema(schema, value, path = '') {
-  const check = TYPE_CHECKS[schema.type];
-  if (check && !check(value)) {
-    return `${label(path)} must be ${schema.type === 'integer' ? 'an' : 'a'} ${schema.type}.`;
+  const problem = typeProblem(schema, value, path);
+  if (problem) {
+    return problem;
   }
   if (schema.enum && !schema.enum.includes(value)) {
     return `${label(path)} must be one of ${schema.enum.join(', ')}.`;
   }
-  if (schema.type === 'object') {
+  if (hasType(schema, 'object') && isPlainObject(value)) {
     return checkObject(schema, value, path);
   }
-  if (schema.type === 'array') {
+  if (hasType(schema, 'array') && Array.isArray(value)) {
     return checkArray(schema, value, path);
   }
   return null;
@@ -724,10 +755,464 @@ const LANGUAGE_TOOLS = [
   }),
 ];
 
-const TOOLS = [LIST_WORKSPACES_TOOL, ...FILE_TOOLS, ...LANGUAGE_TOOLS];
+// ---------------------------------------------------------------------------
+// Local files (paths on the machine running this MCP server)
+// ---------------------------------------------------------------------------
+
+const MAX_PATCH_BYTES = 1024 * 1024;
+const UTF8_BOM_BYTES = 3;
+const REUPLOAD_HINT = "Inspect the target's hash with lswb_host_stat before deciding whether to re-upload.";
+
+function localFileUnavailable(message, details) {
+  return toolError('local_file_unavailable', message, details);
+}
+
+// Resolves localPath to a regular file: { path, size } or { error: toolResult }.
+function resolveLocalFile(localPath) {
+  let real;
+  let stat;
+  try {
+    real = fs.realpathSync(localPath);
+    stat = fs.statSync(real);
+  } catch (error) {
+    return { error: localFileUnavailable('localPath cannot be read on the machine running this MCP server.', { errno: error.code }) };
+  }
+  if (!stat.isFile()) {
+    return { error: localFileUnavailable('localPath must resolve to a regular file.') };
+  }
+  return { path: real, size: stat.size };
+}
+
+function validateLocalPathTool(inputSchema) {
+  return args => {
+    const problem = validateAgainstSchema(inputSchema, args);
+    if (problem) {
+      return problem;
+    }
+    if (!nodePath.isAbsolute(args.localPath)) {
+      return 'localPath must be an absolute path on the machine running this MCP server.';
+    }
+    return null;
+  };
+}
+
+function patchTooLarge() {
+  return toolError('invalid_patch', 'Supply a text patch of at most 1 MiB.');
+}
+
+function readPatchText(file) {
+  if (file.size > MAX_PATCH_BYTES + UTF8_BOM_BYTES) {
+    return { error: patchTooLarge() };
+  }
+  let patch;
+  try {
+    patch = fs.readFileSync(file.path, 'utf8');
+  } catch (error) {
+    return { error: localFileUnavailable('localPath cannot be read on the machine running this MCP server.', { errno: error.code }) };
+  }
+  patch = patch.replace(/^﻿/u, '');
+  if (Buffer.byteLength(patch, 'utf8') > MAX_PATCH_BYTES) {
+    return { error: patchTooLarge() };
+  }
+  return { patch };
+}
+
+async function applyPatchFile(args) {
+  const file = resolveLocalFile(args.localPath);
+  if (file.error) {
+    return file.error;
+  }
+  const read = readPatchText(file);
+  if (read.error) {
+    return read.error;
+  }
+  const fields = { workspace: args.workspace, patch: read.patch };
+  if (args.checkOnly !== undefined) {
+    fields.checkOnly = args.checkOnly;
+  }
+  return callGuest('applyPatch', fields);
+}
+
+// ---------------------------------------------------------------------------
+// Chunked upload (cli.uploadTransfer over the remembered binding)
+// ---------------------------------------------------------------------------
+
+function extensionFailure(error) {
+  const failure = new Error((error && error.message) || 'The bridge rejected the request.');
+  failure.extensionError = error;
+  return failure;
+}
+
+// Builds call(body) for uploadTransfer and records the first failing transfer step.
+// transferAbort is cleanup only, so its own outcome never replaces the real failure.
+function boundCall(binding, root, tracker) {
+  const target = { id: binding.instance, pipeName: binding.pipeName };
+  return async body => {
+    if (body.op !== 'transferAbort') {
+      tracker.lastOp = body.op;
+    }
+    let response;
+    try {
+      response = await request(target, buildBody(body.op, binding, { workspace: root, ...body }), REQUEST_TIMEOUT_MS);
+    } catch (error) {
+      error.transport = true;
+      throw error;
+    }
+    if (!response || response.ok !== true) {
+      throw extensionFailure(response && response.error);
+    }
+    if (body.op === 'transferCommit') {
+      tracker.committed = true;
+    }
+    return response.result;
+  };
+}
+
+function commitOutcomeUnknown(error) {
+  const details = { requestSent: error.requestSent, stage: 'transferCommit' };
+  if (error.transportCode) {
+    details.transportCode = error.transportCode;
+  }
+  const message = `${error.message || 'Bridge transport failed.'} ${REUPLOAD_HINT}`;
+  return toolError('transport_outcome_unknown', message, details);
+}
+
+function mapUploadError(root, error, tracker) {
+  if (error.extensionError !== undefined) {
+    return mapExtensionError(root, error.extensionError);
+  }
+  if (error.transport) {
+    if (tracker.lastOp === 'transferCommit' && transportCode(error) === 'transport_outcome_unknown') {
+      return commitOutcomeUnknown(error);
+    }
+    return mapTransportError(error);
+  }
+  if (tracker.committed) {
+    return toolError('upload_integrity_failed', `${error.message} ${REUPLOAD_HINT}`);
+  }
+  if (tracker.lastOp === null) {
+    return localFileUnavailable(error.message || 'localPath cannot be read.', { errno: error.code });
+  }
+  return toolError('local_file_changed', `${error.message || 'Local upload source changed.'} The upload was aborted; nothing was committed.`);
+}
+
+async function uploadFile(args) {
+  const file = resolveLocalFile(args.localPath);
+  if (file.error) {
+    return file.error;
+  }
+  const binding = await resolveBinding(args.workspace);
+  if (!binding) {
+    return workspaceNotFound(args.workspace);
+  }
+  const tracker = { lastOp: null, committed: false };
+  const options = {
+    input: file.path,
+    path: args.path,
+    overwrite: args.overwrite === true,
+    expectedCurrentSha256: args.expectedCurrentSha256,
+  };
+  try {
+    const result = await uploadTransfer(boundCall(binding, args.workspace, tracker), options);
+    return toolResult(result, false);
+  } catch (error) {
+    return mapUploadError(args.workspace, error, tracker);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Host tool table
+// ---------------------------------------------------------------------------
+
+const HOST_NOTE = 'Uses the Host channel: the Host must share a read/write PowerShell terminal '
+  + 'and terminal.enabled must be on in the bridge settings; check with lswb_host_status.';
+const HOST_PATH = text('Workspace-relative path with forward slashes, resolved on the Host.');
+const LOCAL_PATH = text('Absolute path on the machine running this MCP server, not a workspace path.');
+const LOCAL_PATH_NOTE = 'localPath is a path on the machine running this MCP server, not a workspace path; '
+  + 'it must be absolute (relative paths are rejected as invalid params, -32602) and resolve to a regular file, '
+  + 'otherwise the result is local_file_unavailable.';
+const MUTATION_NOTE = 'On transport_outcome_unknown the mutation may have happened; inspect before retrying. Nothing is replayed automatically.';
+const GLOBS = {
+  type: ['string', 'array'],
+  items: { type: 'string' },
+  description: 'A glob or an array of at most 100 globs.',
+};
+const JOB_ID = text('jobId returned by lswb_host_exec.');
+const PARENTS = bool('Create missing parent directories (needs mkdir permission). Default true when mkdir is permitted.');
+const SAVED_ONLY = 'Results cover saved Host disk files only; dirty editor buffers are neither saved nor merged. '
+  + 'Check complete, truncated and unsavedDocuments before relying on the result.';
+
+const HOST_OPERATION_TOOLS = [
+  guestTool({
+    name: 'lswb_host_status',
+    op: 'hostStatus',
+    description: describe(
+      'Report whether the Host channel is available and bound for a workspace, plus eligible shared terminal candidates.',
+      'WHEN TO USE: Before any other Host tool, or after a host_channel_uncertain error.',
+      'Read-only. The Host channel needs the Host to share a read/write PowerShell terminal and terminal.enabled turned on.',
+    ),
+  }),
+  guestTool({
+    name: 'lswb_host_bind',
+    op: 'hostBind',
+    description: describe(
+      'Bind the Host channel to the shared Host terminal for this workspace (a random handshake file verifies the Host root).',
+      'WHEN TO USE: When lswb_host_status reports bound:false, or to recover after host_channel_uncertain.',
+      'acknowledgeRecovery:true may only be used after the user has inspected the Host terminal and confirmed it is idle;',
+      'no earlier command is ever replayed automatically.',
+      HOST_NOTE,
+    ),
+    properties: {
+      hostWorkspacePath: text('Optional Host workspace path for the shared root; otherwise the terminal current directory is verified.'),
+      acknowledgeRecovery: bool('Rebind after an uncertain Host outcome. Only after the user inspected the Host.'),
+    },
+  }),
+  guestTool({
+    name: 'lswb_search',
+    op: 'search',
+    description: describe(
+      'Search the text of saved files on the Host (ripgrep-style), with include/exclude globs.',
+      'WHEN TO USE: Complete content search across the workspace.',
+      SAVED_ONLY,
+      HOST_NOTE,
+    ),
+    properties: {
+      query: text('Search text or regular expression, 1..10000 characters.'),
+      include: GLOBS,
+      exclude: GLOBS,
+      regex: bool('Treat query as a regular expression. Default false.'),
+      caseSensitive: bool('Case-sensitive match. Default false.'),
+      wholeWord: bool('Match whole words only. Default false.'),
+      useExcludes: bool('Apply the default excludes. Default true.'),
+      limit: int('Maximum results, 1..10000. Default 500.'),
+    },
+    required: ['query'],
+  }),
+  guestTool({
+    name: 'lswb_find_files',
+    op: 'findFiles',
+    description: describe(
+      'Find saved Host file paths matching glob patterns.',
+      'WHEN TO USE: Locate files by name or extension across the workspace.',
+      SAVED_ONLY,
+      HOST_NOTE,
+    ),
+    properties: {
+      pattern: GLOBS,
+      exclude: GLOBS,
+      useExcludes: bool('Apply the default excludes. Default true.'),
+      limit: int('Maximum results, 1..10000. Default 500.'),
+    },
+  }),
+  guestTool({
+    name: 'lswb_host_stat',
+    op: 'hostStat',
+    description: describe(
+      'Return Host disk metadata for a path, optionally the raw-byte SHA-256 (withHash) and editor text states (withTextHash).',
+      'WHEN TO USE: Verify a Host file after a copy, upload or uncertain mutation. Read-only.',
+      HOST_NOTE,
+    ),
+    properties: {
+      path: HOST_PATH,
+      withHash: bool('Include the SHA-256 of the raw Host bytes (needs readBytes permission).'),
+      withTextHash: bool('Also inspect open editor text state for this path (needs read permission).'),
+    },
+    required: ['path'],
+  }),
+  guestTool({
+    name: 'lswb_copy',
+    op: 'copy',
+    description: describe(
+      'Copy a single file byte-for-byte on the Host.',
+      'WHEN TO USE: Duplicate a file, including binary files. Rejected when source or destination has unsaved documents.',
+      'overwrite:true replaces an existing destination and needs write permission.',
+      MUTATION_NOTE,
+      HOST_NOTE,
+    ),
+    properties: {
+      path: HOST_PATH,
+      to: text('Workspace-relative destination path.'),
+      overwrite: bool('Replace an existing destination. Default false.'),
+      parents: PARENTS,
+    },
+    required: ['path', 'to'],
+  }),
+  guestTool({
+    name: 'lswb_copy_dir',
+    op: 'copyDirectory',
+    description: describe(
+      'Copy a directory tree on the Host. The destination must not exist; merging or replacing is not supported.',
+      'WHEN TO USE: Duplicate a directory.',
+      MUTATION_NOTE,
+      HOST_NOTE,
+    ),
+    properties: {
+      path: HOST_PATH,
+      to: text('Workspace-relative destination path; must not exist.'),
+      parents: PARENTS,
+    },
+    required: ['path', 'to'],
+  }),
+  guestTool({
+    name: 'lswb_read_bytes',
+    op: 'readBytes',
+    description: describe(
+      'Read a saved Host file as base64 with its size and SHA-256.',
+      'WHEN TO USE: Read small binary files. Limited to transfer.chunkBytes (default 32 KiB);',
+      'larger files cannot be read because large downloads are not implemented. Read-only.',
+      HOST_NOTE,
+    ),
+    properties: { path: HOST_PATH },
+    required: ['path'],
+  }),
+  guestTool({
+    name: 'lswb_write_bytes',
+    op: 'writeBytes',
+    description: describe(
+      'Write base64 bytes to a Host file in one request (at most transfer.chunkBytes).',
+      'WHEN TO USE: Write small binary files; use lswb_upload_file for larger local files.',
+      'overwrite:true needs write permission; expectedCurrentSha256 guards the current content.',
+      MUTATION_NOTE,
+      HOST_NOTE,
+    ),
+    properties: {
+      path: HOST_PATH,
+      base64: text('Canonical base64 of the full file content.'),
+      overwrite: bool('Replace an existing file. Default false.'),
+      expectedCurrentSha256: text('SHA-256 the existing file must have (from lswb_host_stat withHash).'),
+      parents: PARENTS,
+    },
+    required: ['path', 'base64'],
+  }),
+  guestTool({
+    name: 'lswb_host_exec',
+    op: 'hostExec',
+    description: describe(
+      'Start a command in a bounded Host PowerShell child process.',
+      'WHEN TO USE: Build, test or run tools on the Host. Needs every other operation permission.',
+      'The result state may be running: poll with lswb_host_job_poll until it ends. state completed does not mean exit code 0; check exitCode.',
+      'When the command is known to change files, pass them as affectedPaths so editor state is refreshed;',
+      'otherwise fileChanges is not_tracked.',
+      MUTATION_NOTE,
+      HOST_NOTE,
+    ),
+    properties: {
+      command: text('PowerShell command, 1..8000 characters.'),
+      cwd: text('Workspace-relative working directory. Default the workspace root.'),
+      timeoutMs: int('Child timeout 1000..3600000 ms. Default terminal.commandTimeoutMs.'),
+      waitMs: int('How long to wait for completion before returning running, 0..5000 ms. Default 1000.'),
+      affectedPaths: { type: 'array', items: { type: 'string' }, description: 'Up to 100 workspace-relative paths the command changes.' },
+    },
+    required: ['command'],
+  }),
+  guestTool({
+    name: 'lswb_host_job_poll',
+    op: 'hostJobPoll',
+    description: describe(
+      'Poll a Host job started by lswb_host_exec for state, exit code and output.',
+      'WHEN TO USE: While a job is running. Pass the returned stdout/stderr offsets to fetch only new output.',
+      HOST_NOTE,
+    ),
+    properties: {
+      jobId: JOB_ID,
+      waitMs: int('Wait up to 0..5000 ms for completion. Default 0.'),
+      stdoutOffset: int('Character offset of stdout already read. Default 0.'),
+      stderrOffset: int('Character offset of stderr already read. Default 0.'),
+    },
+    required: ['jobId'],
+  }),
+  guestTool({
+    name: 'lswb_host_job_cancel',
+    op: 'hostJobCancel',
+    description: describe(
+      'Cancel a running Host job; only the bridge-owned process tree is terminated.',
+      'WHEN TO USE: Stop a job that hangs or is no longer needed.',
+      HOST_NOTE,
+    ),
+    properties: { jobId: JOB_ID },
+    required: ['jobId'],
+  }),
+  guestTool({
+    name: 'lswb_host_job_forget',
+    op: 'hostJobForget',
+    description: describe(
+      'Release a finished Host job and its retained output.',
+      'WHEN TO USE: After reading the final result. Jobs with affectedPaths must be polled to completion first.',
+      HOST_NOTE,
+    ),
+    properties: { jobId: JOB_ID },
+    required: ['jobId'],
+  }),
+  guestTool({
+    name: 'lswb_apply_patch',
+    op: 'applyPatch',
+    description: describe(
+      'Apply a Git unified-diff text patch (a/ and b/ prefixes, 1..100 files, at most 1 MiB) on the Host.',
+      'WHEN TO USE: Multi-file changes; run with checkOnly:true first. Binary, symlink and submodule patches are rejected.',
+      'Needs edit, create, delete and move permissions; target files must not have unsaved documents.',
+      MUTATION_NOTE,
+      HOST_NOTE,
+    ),
+    properties: {
+      patch: text('Unified diff text.'),
+      checkOnly: bool('Only check that the patch applies. Default false.'),
+    },
+    required: ['patch'],
+  }),
+];
+
+function localPathTool({ name, description, properties, required, handler }) {
+  const tool = guestTool({ name, description, properties, required, handler });
+  tool.validate = validateLocalPathTool(tool.inputSchema);
+  return tool;
+}
+
+const LOCAL_FILE_TOOLS = [
+  localPathTool({
+    name: 'lswb_apply_patch_file',
+    description: describe(
+      'Apply a Git unified-diff patch read from a local file (UTF-8, BOM removed, at most 1 MiB) on the Host.',
+      'WHEN TO USE: Patches too large or awkward to pass inline; same rules as lswb_apply_patch.',
+      LOCAL_PATH_NOTE,
+      MUTATION_NOTE,
+      HOST_NOTE,
+    ),
+    properties: {
+      localPath: LOCAL_PATH,
+      checkOnly: bool('Only check that the patch applies. Default false.'),
+    },
+    required: ['localPath'],
+    handler: applyPatchFile,
+  }),
+  localPathTool({
+    name: 'lswb_upload_file',
+    description: describe(
+      'Upload a local file to a Host workspace path in transfer.chunkBytes chunks, verified by SHA-256.',
+      'WHEN TO USE: Copy any local file (binary or large) into the workspace.',
+      LOCAL_PATH_NOTE,
+      'Any failed step is followed by a best-effort abort; the commit is never retried.',
+      'The result contains bytes, sha256 and written.',
+      'If the commit outcome is unknown (transport_outcome_unknown), inspect the target hash with lswb_host_stat before re-uploading.',
+      HOST_NOTE,
+    ),
+    properties: {
+      localPath: LOCAL_PATH,
+      path: text('Workspace-relative destination path on the Host.'),
+      overwrite: bool('Replace an existing file (needs write permission). Default false.'),
+      expectedCurrentSha256: text('SHA-256 the existing file must have (from lswb_host_stat withHash).'),
+    },
+    required: ['localPath', 'path'],
+    handler: uploadFile,
+  }),
+];
+
+const HOST_TOOLS = [...HOST_OPERATION_TOOLS, ...LOCAL_FILE_TOOLS];
+
+const TOOLS = [LIST_WORKSPACES_TOOL, ...FILE_TOOLS, ...LANGUAGE_TOOLS, ...HOST_TOOLS];
 
 module.exports = {
   TOOLS,
+  HOST_TOOLS,
   registryDir,
   validateAgainstSchema,
   refreshBindings,
