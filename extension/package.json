@@ -32,7 +32,8 @@
     "ui"
   ],
   "activationEvents": [
-    "*"
+    "onFileSystem:vsls",
+    "onStartupFinished"
   ],
   "capabilities": {
     "virtualWorkspaces": true,
