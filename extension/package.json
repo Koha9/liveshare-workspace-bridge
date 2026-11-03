@@ -24,7 +24,7 @@
     "automation"
   ],
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.101.0"
   },
   "main": "./extension.cjs",
   "icon": "assets/icon.png",
@@ -43,9 +43,15 @@
   },
   "scripts": {
     "test": "node --test test/*.test.cjs",
-    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs && node --check startup-diagnostics.cjs && node --check mcp-server.cjs && node --check mcp-launcher.cjs && node --check mcp-launcher-install.cjs"
+    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs && node --check startup-diagnostics.cjs && node --check mcp-server.cjs && node --check mcp-launcher.cjs && node --check mcp-launcher-install.cjs && node --check mcp-definition-provider.cjs"
   },
   "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "liveshareWorkspaceBridge.mcp",
+        "label": "Live Share Workspace Bridge"
+      }
+    ],
     "commands": [
       {
         "command": "liveshareWorkspaceBridge.restart",

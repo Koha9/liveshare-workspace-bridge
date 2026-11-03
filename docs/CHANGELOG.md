@@ -4,6 +4,8 @@
 
 - Unreleased — Activation is now limited to `onFileSystem:vsls` and `onStartupFinished` instead of `*`.
 
+- Unreleased — The extension registers its MCP server with VS Code through `vscode.lm.registerMcpServerDefinitionProvider`, which raises the minimum VS Code version to 1.101.
+
 - 0.2.4 — Broken-pipe cleanup, bounded runtime reconnection, preserved Host uncertainty, concurrent discovery and agent restart guidance.
 
 - 0.2.3 — Local startup summaries, safe shell metadata and current/history separation.
