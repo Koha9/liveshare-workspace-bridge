@@ -43,6 +43,23 @@ class ReleasePackageTests(unittest.TestCase):
         expected = {f'extension/docs/{stem}{locale}.md' for stem in stems for locale in locales}
         self.assertEqual({name for name in self.members if name.startswith('extension/docs/')}, expected)
 
+    def test_mcp_server_ships_with_its_require_chain(self):
+        for name in ('mcp-server.cjs', 'mcp-tools.cjs', 'cli.cjs', 'package.json'):
+            member = f'extension/{name}'
+            self.assertTrue(member in self.members, f'{member} is not packaged')
+        build.check_relative_requires(self.members)
+
+    def test_dangling_relative_require_fails_the_package(self):
+        members = {
+            'extension/a.cjs': b"const b = require('./b.cjs');\nconst c = require( \"./missing.cjs\" );\n",
+            'extension/b.cjs': b"const os = require('node:os');\n",
+        }
+        with self.assertRaises(ValueError) as caught:
+            build.check_relative_requires(members)
+        self.assertIn('extension/a.cjs', str(caught.exception))
+        self.assertIn('./missing.cjs', str(caught.exception))
+        self.assertNotIn('./b.cjs', str(caught.exception))
+
     def test_reader_links_resolve_on_marketplace(self):
         repository = 'https://github.com/Koha9/liveshare-workspace-bridge'
         result = build.marketplace_markdown('[Guide](../docs/USAGE.md) [Local](README.ja.md) [Web](https://example.org) [Part](#part)', 'extension/README.md', repository)
