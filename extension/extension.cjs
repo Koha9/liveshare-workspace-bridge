@@ -11,6 +11,7 @@ const { createWorkspaceApi } = require('./workspace.cjs');
 const { ACCESS_KEYS, prepareAccess, listLocalUsers, configureAccess } = require('./ipc-access.cjs');
 const { createStartupJournal, captureStartupStderr } = require('./startup-diagnostics.cjs');
 const { installLauncher, launcherPath, renderMcpConfig } = require('./mcp-launcher-install.cjs');
+const { registerMcpDefinitionProvider } = require('./mcp-definition-provider.cjs');
 const version = require('./package.json').version;
 const registry = path.join(os.homedir(), '.liveshare-local', 'instances');
 
@@ -143,6 +144,12 @@ function activate(context) {
     sourcePath: path.join(__dirname, 'mcp-launcher.cjs'),
     log: message => output.appendLine(message),
   });
+  context.subscriptions.push(registerMcpDefinitionProvider({
+    vscode,
+    extensionDir: __dirname,
+    version,
+    log: message => output.appendLine(message),
+  }));
   start(); // Also supports joining Live Share after this extension has activated.
   updateStatus();
 }
