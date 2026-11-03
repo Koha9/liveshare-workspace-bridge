@@ -43,7 +43,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.cjs",
-    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs && node --check startup-diagnostics.cjs && node --check mcp-server.cjs"
+    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-bootstrap.cjs && node --check host-transport-terminal.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs && node --check startup-diagnostics.cjs && node --check mcp-server.cjs"
   },
   "contributes": {
     "commands": [

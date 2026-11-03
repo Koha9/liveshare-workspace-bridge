@@ -38,12 +38,15 @@ $script:pendingAccept = $null
 $script:pendingIo = $null
 
 # The only place that knows where the shared core and C# runtime come from.
-# A future single-file renderer replaces just this function body.
+# The single-file renderer (host-bootstrap.cjs) replaces the marked body with
+# the inlined core and an embedded runtime, so nothing is read from disk.
 function Import-HostCore {
+    #__LSWB_IMPORT_CORE_BEGIN__#
     if (-not ('LswbHostV020.Job' -as [type])) {
         Add-Type -Path (Join-Path $PSScriptRoot 'host-runtime.cs')
     }
     . (Join-Path $PSScriptRoot 'host-core.ps1')
+    #__LSWB_IMPORT_CORE_END__#
 }
 
 function Resolve-HostRoot([string]$Requested) {
@@ -180,7 +183,10 @@ function Read-RequestBytes($Stream) {
 function Read-RequestLine($Stream) {
     $bytes = Read-RequestBytes $Stream
     if ($bytes.Length -gt 0 -and $bytes[$bytes.Length - 1] -eq 13) {
-        $bytes = $bytes[0..($bytes.Length - 2)]
+        # Resize, not a range slice: 0..-1 would yield two elements.
+        $trimmed = [byte[]]$bytes
+        [Array]::Resize([ref]$trimmed, $trimmed.Length - 1)
+        $bytes = $trimmed
     }
     if ($bytes.Length -eq 0) {
         Fail 'invalid_frame' 'The request line is empty.'
