@@ -1,0 +1,134 @@
+# MCP server
+
+[Documentation](README.md)
+
+Live Share Workspace Bridge ships a Model Context Protocol (MCP) server. Your agent starts it as a local stdio process on the Guest machine. The server reaches the running VS Code extension through the bridge's local Windows named pipe and opens no network ports.
+
+MCP is the supported agent interface. Any MCP client that can start a stdio server can use it, for example Claude Code, Codex or the VS Code built-in agent.
+
+## Setup
+
+Requirements: Windows, VS Code 1.101 or later with Live Share, Node.js on `PATH`, and the extension installed in the Live Share Guest window.
+
+1. Open the Guest window and connect to the shared project.
+2. Run **Live Share Workspace Bridge: Copy MCP Server Configuration** from the Command Palette. This copies ready-to-paste snippets to the clipboard and also prints them in the "Live Share Workspace Bridge" output channel.
+3. Add the server to your agent using one of the options below.
+
+When the extension activates, it installs a small launcher at `<home>/.liveshare-local/mcp-server.cjs`. The launcher always starts the server from the extension version that is currently running, so your agent configuration does not need to change after an extension upgrade. The copied snippets contain your real path. The examples below use the placeholder `<home>`.
+
+### Claude Code
+
+```text
+claude mcp add lswb -- node "<home>/.liveshare-local/mcp-server.cjs"
+```
+
+### Codex
+
+Add this to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.lswb]
+command = "node"
+args = ["<home>/.liveshare-local/mcp-server.cjs"]
+```
+
+### VS Code built-in agent
+
+The extension registers the server with VS Code under the name "Live Share Workspace Bridge", so the built-in agent discovers it without any configuration. If you prefer an explicit entry, add this to `.vscode/mcp.json` or your user `mcp.json`:
+
+```json
+{
+  "servers": {
+    "lswb": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["<home>/.liveshare-local/mcp-server.cjs"]
+    }
+  }
+}
+```
+
+### First call
+
+Ask the agent to call `lswb_list_workspaces`. It returns the shared roots. Every other tool takes the exact root `uri` (a `vsls:` URI) as its `workspace` argument.
+
+## Tools
+
+The table lists the 36 tools in v0.2.4. Each tool's MCP description holds the full contract. Every tool is still subject to the bridge permission settings.
+
+- **Modifies files**: whether the tool can change workspace files.
+- **Host channel**: whether the tool needs the optional Host channel described in [Host tools](#host-tools).
+
+| Tool | Purpose | Modifies files | Host channel |
+|---|---|---|---|
+| `lswb_list_workspaces` | List the Live Share Guest workspaces reachable through the local bridge. | no | no |
+| `lswb_status` | Report bridge status for a workspace: instance identity, epoch, roots, permissions, dirty documents and MCP server identity. | no | no |
+| `lswb_list_dir` | List the entries of a shared directory (name and file type). | no | no |
+| `lswb_read_file` | Read a text document from its editor buffer, optionally a 1-based inclusive line range. | no | no |
+| `lswb_read_many` | Read up to 50 text documents in one request. | no | no |
+| `lswb_create_file` | Create a new text file and save it; fails if the file exists. | yes | no |
+| `lswb_write_file` | Replace the whole text of an existing document and save it. | yes | no |
+| `lswb_edit_file` | Apply text replacements to up to 100 documents as one workspace edit, then save each target. | yes | no |
+| `lswb_save_file` | Save one document that has unsaved editor changes. | yes | no |
+| `lswb_mkdir` | Create a directory, including missing parents. | yes | no |
+| `lswb_stat` | Return provider metadata for a path: type, size, mtime, ctime. | no | no |
+| `lswb_move` | Move or rename a file or directory within the workspace. | yes | no |
+| `lswb_delete` | Delete a single file or an empty directory (no trash). | yes | no |
+| `lswb_diagnostics` | Return language diagnostics for a document, or for the whole root. | no | no |
+| `lswb_document_symbols` | Return the symbol outline of a document. | no | no |
+| `lswb_workspace_symbols` | Search symbols across the workspace by name. | no | no |
+| `lswb_definition` | Find the definition locations of the symbol at a position. | no | no |
+| `lswb_references` | Find reference locations of the symbol at a position. | no | no |
+| `lswb_rename_symbol` | Rename a symbol through the language service, then save each changed document. | yes | no |
+| `lswb_format` | Format a document with its language formatter, then save it. | yes | no |
+| `lswb_host_status` | Report whether the Host channel is available and bound, plus eligible shared terminals. | no | status only |
+| `lswb_host_bind` | Bind the Host channel to the shared Host terminal, verified by a random handshake file. | no (temporary handshake file only) | yes |
+| `lswb_search` | Search the text of saved files on the Host, with include/exclude globs. | no | yes |
+| `lswb_find_files` | Find saved Host file paths matching glob patterns. | no | yes |
+| `lswb_host_stat` | Return Host disk metadata for a path, optionally the raw-byte SHA-256 and editor text states. | no | yes |
+| `lswb_copy` | Copy a single file byte-for-byte on the Host. | yes | yes |
+| `lswb_copy_dir` | Copy a directory tree on the Host. | yes | yes |
+| `lswb_read_bytes` | Read a saved Host file as base64 with its size and SHA-256. | no | yes |
+| `lswb_write_bytes` | Write base64 bytes to a Host file in one request (at most `transfer.chunkBytes`). | yes | yes |
+| `lswb_host_exec` | Start a command in a bounded Host PowerShell child process. | may (any command) | yes |
+| `lswb_host_job_poll` | Poll a Host job for state, exit code and output. | no | yes |
+| `lswb_host_job_cancel` | Cancel a running Host job; only the bridge-owned process tree is terminated. | no | yes |
+| `lswb_host_job_forget` | Release a finished Host job and its retained output. | no | yes |
+| `lswb_apply_patch` | Apply a Git unified-diff text patch (1..100 files, at most 1 MiB) on the Host. | yes | yes |
+| `lswb_apply_patch_file` | Apply a Git unified-diff patch read from a local file (at most 1 MiB) on the Host. | yes | yes |
+| `lswb_upload_file` | Upload a local file to a Host workspace path in chunks, verified by SHA-256. | yes | yes |
+
+## Result semantics
+
+Successful results come back as structured content. Failures set `isError` and carry a `code` and a `message`.
+
+- **Applied versus saved.** Edit tools report `applied` (VS Code accepted the edit into the document) separately from per-document save results (`saved`, `dirty`). A result can be applied but not saved. Normal edits save only their targets.
+- **`transport_outcome_unknown`.** The request reached the bridge, but its outcome was not confirmed. A mutation may already have happened. Inspect the target before you retry, for example with `lswb_read_file`, `lswb_stat` or `lswb_host_stat`. The server never replays a mutation automatically. `transport_unavailable` means the request was not sent.
+- **`workspace_changed`** (also `workspace_mismatch`, `instance_mismatch`, `epoch_mismatch`). The workspace binding is stale: the shared session, VS Code instance or bridge epoch changed. Call `lswb_list_workspaces` again and use the new root `uri`. If the failed call was a mutation, inspect the target first.
+- **Search is incomplete by design.** Host search and find cover saved Host files only. Check `complete`, `truncated` and `unsavedDocuments` before you rely on a result.
+
+### Host tools
+
+Tools in the Host channel column run on the Live Share Host. They require all of the following:
+
+- the Host shares a read/write Windows PowerShell terminal;
+- `terminal.enabled` is on in the bridge settings, together with the operation's own permission;
+- a bound channel: check with `lswb_host_status` and bind with `lswb_host_bind`.
+
+Search and patches also need ripgrep and Git on the Host. By default, every request is typed into the shared terminal. The optional `host.transport: portForward` setting instead starts a foreground Host helper once and sends requests over a Live Share forwarded port. See [Settings](SETTINGS.md).
+
+## MCP, the CLI and the skill
+
+- The MCP server is the supported agent interface.
+- The Codex skill (`$liveshare-workspace-bridge`) is the legacy interface. MCP will replace it.
+- `cli.cjs` remains available for diagnostics. The MCP server reuses its local transport internally.
+
+All three talk to the same extension over the same local pipe and follow the same permissions.
+
+## Known limitations
+
+- **No large-file download.** Large downloads return `feature_unavailable`. Ask the user for an accessible copy and its local path instead. Do not work around the limit with repeated byte reads or raw commands. Small byte reads and large uploads remain available.
+- **Local paths.** `lswb_upload_file` and `lswb_apply_patch_file` read `localPath` on the machine that runs the MCP server. The path must be absolute.
+- **Pipe access.** The IPC access mode (owner only by default) decides which local Windows accounts can reach the pipe, and therefore which accounts can run the MCP server. See [IPC access](IPC-SECURITY.md).
+- **No recursive delete** and no multi-file disk transaction.
+- **Windows only.**
