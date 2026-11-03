@@ -28,6 +28,11 @@ test('extension starts before joining, refreshes workspace epoch, restarts and r
   t.after(() => { for (const disposable of context.subscriptions.slice().reverse()) disposable.dispose();assert.equal(path.dirname(localHome),os.tmpdir());assert.ok(path.basename(localHome).startsWith('lswb-lifecycle-home-'));fs.rmSync(localHome,{recursive:true,force:true}); });
   extension.activate(context);
   assert.deepEqual([...commands.keys()].sort(), manifest.contributes.commands.map(x => x.command).sort());
+  assert.ok(commands.has('liveshareWorkspaceBridge.copyMcpConfig'));
+  const launcher = path.join(localHome, '.liveshare-local', 'mcp-server.cjs');
+  assert.deepEqual(fs.readFileSync(launcher), fs.readFileSync(path.join(__dirname, '..', 'mcp-launcher.cjs')));
+  await commands.get('liveshareWorkspaceBridge.copyMcpConfig')();
+  assert.ok(bridgeOutput.join('').includes(JSON.stringify(launcher)));
   async function ownRecord(except) {
     // PowerShell compiles the native IPC helper at startup. Shared Windows CI
     // runners can take longer than five seconds under parallel test load.
