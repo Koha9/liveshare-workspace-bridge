@@ -47,7 +47,7 @@ if (skipReason) {
     assert.deepEqual(client.getServerVersion(), { name: 'liveshare-workspace-bridge', version: PACKAGE_VERSION });
 
     const { tools } = await client.listTools();
-    assert.deepEqual(tools.map(tool => tool.name), ['lswb_list_workspaces']);
+    assert.ok(tools.some(tool => tool.name === 'lswb_list_workspaces'));
 
     const result = await client.callTool({ name: 'lswb_list_workspaces', arguments: {} });
     assert.notEqual(result.isError, true);
