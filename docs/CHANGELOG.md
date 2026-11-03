@@ -5,6 +5,7 @@
 - Unreleased — Activation is now limited to `onFileSystem:vsls` and `onStartupFinished` instead of `*`.
 
 - Unreleased — The extension registers its MCP server with VS Code through `vscode.lm.registerMcpServerDefinitionProvider`, which raises the minimum VS Code version to 1.101.
+- Unreleased — Optional `host.transport: portForward`: the shared terminal starts a foreground in-memory Host helper once and requests use a Live Share forwarded loopback port (settings `host.transport`, `host.guestPort`, `host.idleTimeoutMinutes`, `host.handshakeTimeoutMinutes`; default `sharedTerminal` is unchanged). New error codes: `host_transport_unavailable`, `host_request_too_large`, `host_bind_cancelled`, `host_port_forward_required`, `host_port_unavailable`.
 
 - 0.2.4 — Broken-pipe cleanup, bounded runtime reconnection, preserved Host uncertainty, concurrent discovery and agent restart guidance.
 

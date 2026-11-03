@@ -62,12 +62,19 @@ async function freePorts(count) {
 
 function startServer(t, options) {
   const args = [
-    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
-    '-File', SCRIPT,
     '-Token', options.token,
     '-Port', String(options.port),
     '-WorkspaceRoot', options.root,
     '-IdleTimeoutMs', String(options.idleMs),
+  ];
+  return startScript(t, SCRIPT, args);
+}
+
+function startScript(t, script, scriptArgs) {
+  const args = [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', script,
+    ...scriptArgs,
   ];
   const child = spawn(powershellPath(), args, { windowsHide: true, env: powershellEnv() });
   const state = { stdout: '', stderr: '' };
@@ -193,4 +200,33 @@ test('Host TCP helper exits on its own after the idle timeout', { skip: SKIP, ti
   await server.banner;
   assert.equal(await server.exited, 0, server.state.stdout + server.state.stderr);
   assert.match(server.state.stdout, /Idle timeout reached/u);
+});
+
+test('rendered single-file Host helper runs without the core or runtime files beside it', { skip: SKIP, timeout: 120000 }, async t => {
+  const { renderServerBootstrap } = require('../host-bootstrap.cjs');
+  const root = makeRoot(t);
+  const scriptDirectory = makeRoot(t);
+  const token = crypto.randomBytes(32).toString('hex');
+  const port = await freePorts(1);
+  const script = path.join(scriptDirectory, 'rendered-helper.ps1');
+  fs.writeFileSync(script, renderServerBootstrap({ token, port, portAttempts: 1, idleTimeoutMs: 60000 }));
+  assert.deepEqual(fs.readdirSync(scriptDirectory), ['rendered-helper.ps1']);
+  const server = startScript(t, script, ['-WorkspaceRoot', root]);
+  const banner = await server.banner;
+  assert.deepEqual(banner, { port, protocol: 3, token: token.slice(0, 8) });
+
+  const hello = await request(port, token, 'hello');
+  assert.equal(hello.reply.ok, true, JSON.stringify(hello.reply));
+  assert.equal(hello.reply.result.protocol, 3);
+  assert.equal(hello.reply.result.transport, 'tcp');
+
+  // A lone CR line is empty after trimming, not a two-byte line.
+  const carriage = await send(port, '\r');
+  assert.equal(carriage.ok, false);
+  assert.equal(carriage.error.code, 'invalid_frame');
+
+  const stop = await request(port, token, 'shutdown');
+  assert.equal(stop.reply.result.stopping, true);
+  assert.equal(await server.exited, 0, server.state.stdout + server.state.stderr);
+  assert.doesNotMatch(server.state.stdout, new RegExp(token));
 });
