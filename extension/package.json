@@ -43,7 +43,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.cjs",
-    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs && node --check startup-diagnostics.cjs && node --check mcp-server.cjs"
+    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs && node --check startup-diagnostics.cjs && node --check mcp-server.cjs && node --check mcp-launcher.cjs && node --check mcp-launcher-install.cjs"
   },
   "contributes": {
     "commands": [
@@ -66,6 +66,10 @@
       {
         "command": "liveshareWorkspaceBridge.showStartupDiagnostics",
         "title": "Live Share Workspace Bridge: Show Startup Diagnostics"
+      },
+      {
+        "command": "liveshareWorkspaceBridge.copyMcpConfig",
+        "title": "Live Share Workspace Bridge: Copy MCP Server Configuration"
       }
     ],
     "configuration": {

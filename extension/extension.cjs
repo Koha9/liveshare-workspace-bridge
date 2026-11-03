@@ -10,6 +10,7 @@ const { MAX_RESPONSE } = require('./core.cjs');
 const { createWorkspaceApi } = require('./workspace.cjs');
 const { ACCESS_KEYS, prepareAccess, listLocalUsers, configureAccess } = require('./ipc-access.cjs');
 const { createStartupJournal, captureStartupStderr } = require('./startup-diagnostics.cjs');
+const { installLauncher, launcherPath, renderMcpConfig } = require('./mcp-launcher-install.cjs');
 const version = require('./package.json').version;
 const registry = path.join(os.homedir(), '.liveshare-local', 'instances');
 
@@ -134,8 +135,32 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspaceBridge.configureAccess',async()=>{try{await configureAccess(vscode,()=>listLocalUsers(powershellPath()));}catch(error){await vscode.window.showErrorMessage('IPC access configuration failed: '+error.message);}}));
   context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspaceBridge.restart', () => { stop(); epoch++; start(); }));
   context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspaceBridge.stop', () => { stop(); output.appendLine('Stopped by command.'); }));
+  context.subscriptions.push(vscode.commands.registerCommand('liveshareWorkspaceBridge.copyMcpConfig', () => copyMcpConfig(output)));
   context.subscriptions.push({ dispose() { disposed = true; stop();api?.dispose();startup.dispose(); } });
+  // Install the stable launcher once per activation, independent of IPC readiness.
+  installLauncher({
+    registryDir: registry,
+    sourcePath: path.join(__dirname, 'mcp-launcher.cjs'),
+    log: message => output.appendLine(message),
+  });
   start(); // Also supports joining Live Share after this extension has activated.
   updateStatus();
+}
+async function copyMcpConfig(output) {
+  const text = renderMcpConfig(launcherPath(registry));
+  output.appendLine(text);
+  output.show?.(true);
+  const clipboard = vscode.env?.clipboard;
+  if (!clipboard) {
+    return;
+  }
+  try {
+    await clipboard.writeText(text);
+  } catch (error) {
+    output.appendLine(`Clipboard write failed: ${error.message}`);
+    await vscode.window.showErrorMessage?.('Copying the MCP configuration failed: ' + error.message);
+    return;
+  }
+  await vscode.window.showInformationMessage?.('MCP configuration copied to the clipboard.');
 }
 module.exports = { activate };
