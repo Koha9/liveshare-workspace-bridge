@@ -140,8 +140,8 @@ test('mcp handshake, ping, tools/list and an empty discovery', async t => {
   assert.deepEqual(ping.result, {});
 
   const list = await session.request(3, 'tools/list');
-  assert.deepEqual(list.result.tools.map(tool => tool.name), ['lswb_list_workspaces']);
-  const [tool] = list.result.tools;
+  const tool = list.result.tools.find(candidate => candidate.name === 'lswb_list_workspaces');
+  assert.ok(tool, 'tools/list includes lswb_list_workspaces');
   assert.ok(tool.description.includes('WHEN TO USE'));
   assert.deepEqual(tool.inputSchema, { type: 'object', properties: {}, additionalProperties: false });
 

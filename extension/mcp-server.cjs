@@ -5,7 +5,7 @@
 // Transport: newline-delimited JSON-RPC 2.0 on stdin/stdout.
 // stdout carries protocol messages only; every diagnostic goes to stderr.
 
-const { discover } = require('./cli.cjs');
+const { TOOLS, registryDir } = require('./mcp-tools.cjs');
 const { version: SERVER_VERSION } = require('./package.json');
 
 const SERVER_NAME = 'liveshare-workspace-bridge';
@@ -23,108 +23,8 @@ const RPC_ERRORS = {
 };
 
 // ---------------------------------------------------------------------------
-// Tool table
+// Tool table (see mcp-tools.cjs)
 // ---------------------------------------------------------------------------
-
-// Discovery directory for bridge instance records. Returning undefined lets
-// cli.cjs fall back to its own default (~/.liveshare-local/instances).
-function registryDir() {
-  const value = process.env.LSWB_REGISTRY_DIR;
-  return value ? value : undefined;
-}
-
-// Discovery statuses that mean "discovery itself failed", mirroring cli.instances().
-const DISCOVERY_FAILURES = {
-  access_denied: {
-    code: 'discovery_access_denied',
-    message: 'Bridge discovery was denied. Check IPC Access Mode in the bridge settings; never change permissions automatically.',
-  },
-  unavailable: {
-    code: 'discovery_unavailable',
-    message: 'Bridge records exist but no instance answered with a valid identity. Restart the bridge connection and retry.',
-  },
-  invalid_registry: {
-    code: 'discovery_invalid_registry',
-    message: 'The bridge instance registry could not be read or contains invalid records.',
-  },
-};
-
-function toolResult(structured, isError) {
-  const result = {
-    content: [{ type: 'text', text: JSON.stringify(structured) }],
-    structuredContent: structured,
-  };
-  if (isError) {
-    result.isError = true;
-  }
-  return result;
-}
-
-function toolError(code, message, details) {
-  const structured = { code, message };
-  if (details !== undefined) {
-    structured.details = details;
-  }
-  return toolResult(structured, true);
-}
-
-function mapRoot(root) {
-  return { name: root.name, uri: root.uri };
-}
-
-function mapWorkspace(instance) {
-  return {
-    instance: instance.id,
-    epoch: instance.epoch,
-    version: instance.version,
-    pid: instance.pid,
-    roots: instance.roots.map(mapRoot),
-  };
-}
-
-async function listWorkspaces() {
-  let report;
-  try {
-    report = await discover({ registryPath: registryDir() });
-  } catch (error) {
-    return toolError('discovery_failed', error.message || 'Bridge discovery failed.');
-  }
-  const failure = DISCOVERY_FAILURES[report.status];
-  if (failure) {
-    const details = { status: report.status, probes: report.probes, issues: report.issues };
-    return toolError(failure.code, failure.message, details);
-  }
-  return toolResult({
-    status: report.status,
-    workspaces: report.instances.map(mapWorkspace),
-    probes: report.probes,
-    issues: report.issues,
-  }, false);
-}
-
-const TOOLS = [
-  {
-    name: 'lswb_list_workspaces',
-    description: [
-      'List the Live Share Guest workspaces reachable through the local Live Share Workspace Bridge.',
-      'WHEN TO USE: Call first to find the Live Share Guest workspaces this bridge can reach; '
-        + 'use the returned root uri as the workspace argument of other lswb_ tools.',
-      'Read-only. Each workspace carries instance, epoch, version, pid and roots ({ name, uri }); '
-        + 'keep instance and epoch together with the root uri. status is ready, partial, '
-        + 'no_shared_workspace or no_records; discovery failures are returned as errors.',
-    ].join(' '),
-    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-    validate: rejectAnyArguments,
-    handler: listWorkspaces,
-  },
-];
-
-function rejectAnyArguments(args) {
-  if (Object.keys(args).length > 0) {
-    return 'lswb_list_workspaces takes no arguments.';
-  }
-  return null;
-}
 
 function publicTool(tool) {
   return {
