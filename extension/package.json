@@ -43,7 +43,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.cjs",
-    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-bootstrap.cjs && node --check host-transport-terminal.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs && node --check startup-diagnostics.cjs && node --check mcp-server.cjs"
+    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-bootstrap.cjs && node --check host-transport-terminal.cjs && node --check host-transport-tcp.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs && node --check startup-diagnostics.cjs && node --check mcp-server.cjs"
   },
   "contributes": {
     "commands": [
@@ -140,6 +140,48 @@
           "scope": "machine",
           "order": 8,
           "description": "Idle lifetime of a Host transfer handle. Expired handles and owned upload staging files are released automatically."
+        },
+        "liveshareWorkspaceBridge.host.transport": {
+          "type": "string",
+          "enum": [
+            "sharedTerminal",
+            "portForward"
+          ],
+          "enumDescriptions": [
+            "Every Host request is typed into the shared read/write PowerShell terminal (default). The Host shares that terminal once.",
+            "The shared terminal starts a foreground Host helper once; requests then use a Live Share forwarded loopback port. The Host shares the terminal once and runs \"Live Share: Share Server\" with the port the bridge shows."
+          ],
+          "default": "sharedTerminal",
+          "scope": "machine",
+          "order": 12,
+          "markdownDescription": "**Host Transport** — `sharedTerminal` sends each Host request through the shared terminal. `portForward` uses the terminal only to start a foreground helper (it stops on Ctrl+C, terminal close, session end or idle timeout) and then needs the Host to run \"Live Share: Share Server\" for the shown port. Takes effect at the next Host bind."
+        },
+        "liveshareWorkspaceBridge.host.guestPort": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 65535,
+          "scope": "machine",
+          "order": 13,
+          "description": "Local port to connect to in portForward mode. 0 uses the same port as the Host helper. Set it only when Live Share forwarded the Host port to a different local port; it is read on every handshake attempt."
+        },
+        "liveshareWorkspaceBridge.host.idleTimeoutMinutes": {
+          "type": "integer",
+          "default": 30,
+          "minimum": 1,
+          "maximum": 1440,
+          "scope": "machine",
+          "order": 14,
+          "description": "In portForward mode, the Host helper exits after this many minutes without a request. Applies to the next helper started."
+        },
+        "liveshareWorkspaceBridge.host.handshakeTimeoutMinutes": {
+          "type": "integer",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 60,
+          "scope": "machine",
+          "order": 15,
+          "description": "In portForward mode, how long the bridge waits for the Host to share the helper port before the bind fails."
         },
         "liveshareWorkspaceBridge.permissions.list": {
           "type": "boolean",

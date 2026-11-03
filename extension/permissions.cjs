@@ -67,6 +67,50 @@ function createPermissions(vscode) {
   }
   return { assert, reason, enabled, value, snapshot };
 }
+function hostTransportProperties() {
+  return {
+    [`${NAMESPACE}.host.transport`]: {
+      type: 'string',
+      enum: ['sharedTerminal', 'portForward'],
+      enumDescriptions: [
+        'Every Host request is typed into the shared read/write PowerShell terminal (default). The Host shares that terminal once.',
+        'The shared terminal starts a foreground Host helper once; requests then use a Live Share forwarded loopback port. The Host shares the terminal once and runs "Live Share: Share Server" with the port the bridge shows.',
+      ],
+      default: 'sharedTerminal',
+      scope: 'machine',
+      order: 12,
+      markdownDescription: '**Host Transport** — `sharedTerminal` sends each Host request through the shared terminal. `portForward` uses the terminal only to start a foreground helper (it stops on Ctrl+C, terminal close, session end or idle timeout) and then needs the Host to run "Live Share: Share Server" for the shown port. Takes effect at the next Host bind.',
+    },
+    [`${NAMESPACE}.host.guestPort`]: {
+      type: 'integer',
+      default: 0,
+      minimum: 0,
+      maximum: 65535,
+      scope: 'machine',
+      order: 13,
+      description: 'Local port to connect to in portForward mode. 0 uses the same port as the Host helper. Set it only when Live Share forwarded the Host port to a different local port; it is read on every handshake attempt.',
+    },
+    [`${NAMESPACE}.host.idleTimeoutMinutes`]: {
+      type: 'integer',
+      default: 30,
+      minimum: 1,
+      maximum: 1440,
+      scope: 'machine',
+      order: 14,
+      description: 'In portForward mode, the Host helper exits after this many minutes without a request. Applies to the next helper started.',
+    },
+    [`${NAMESPACE}.host.handshakeTimeoutMinutes`]: {
+      type: 'integer',
+      default: 5,
+      minimum: 1,
+      maximum: 60,
+      scope: 'machine',
+      order: 15,
+      description: 'In portForward mode, how long the bridge waits for the Host to share the helper port before the bind fails.',
+    },
+  };
+}
+
 function configurationProperties() {
   const properties = {
     [`${NAMESPACE}.ipc.accessMode`]: {type:'string',enum:['ownerOnly','allLocalUsers','selectedUsers'],enumDescriptions:['Only the Windows user running VS Code (release default).','All current machine-local SAM user accounts, in the same Windows session. No remote or domain users.','Only the owner and selected machine-local user SIDs, in the same Windows session.'],default:'ownerOnly',scope:'machine',order:9,markdownDescription:'**IPC Access Mode** — Trust applies to every process under allowed accounts, not only Codex. Calls use bridge permissions outside Codex filesystem sandbox limits. Host access is independent; when enabled it may allow Host commands. Changes restart the bridge; rediscover afterward. Use Configure IPC Access to choose users.'},
@@ -79,7 +123,8 @@ function configurationProperties() {
     [`${NAMESPACE}.terminal.commandTimeoutMs`]: { type: 'integer', default: 120000, minimum: 1000, maximum: 3600000, scope: 'machine', order: 5, description: 'Maximum time for a Host child command. Only the bridge-owned process tree is terminated on timeout.' },
     [`${NAMESPACE}.terminal.maxOutputCharacters`]: { type: 'integer', default: 65536, minimum: 1024, maximum: 262144, scope: 'machine', order: 6, description: 'Maximum retained characters per Host stdout/stderr stream. Excess output is drained and explicitly marked truncated.' },
     [`${NAMESPACE}.transfer.chunkBytes`]: { type: 'integer', default: 32768, minimum: 1024, maximum: 65536, scope: 'machine', order: 7, description: 'Maximum raw bytes in one transfer chunk.' },
-    [`${NAMESPACE}.transfer.idleTimeoutMs`]: { type: 'integer', default: 120000, minimum: 10000, maximum: 900000, scope: 'machine', order: 8, description: 'Idle lifetime of a Host transfer handle. Expired handles and owned upload staging files are released automatically.' }
+    [`${NAMESPACE}.transfer.idleTimeoutMs`]: { type: 'integer', default: 120000, minimum: 10000, maximum: 900000, scope: 'machine', order: 8, description: 'Idle lifetime of a Host transfer handle. Expired handles and owned upload staging files are released automatically.' },
+    ...hostTransportProperties()
   };
   let order = 20;
   for (const [key, [label, description]] of Object.entries(DEFINITIONS)) {

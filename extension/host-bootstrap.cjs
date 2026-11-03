@@ -363,10 +363,11 @@ function awaitListening(options) {
       }
     });
     const revoke = (reason, markUncertain = true) => {
-      const error = Object.assign(new Error(reason.message), { code: 'host_access_revoked', details: reason });
+      const code = ['workspace_changed', 'host_channel_closed'].includes(reason.code) ? reason.code : 'host_access_revoked';
+      const error = Object.assign(new Error(reason.message), { code, details: reason });
       finish(error, null, markUncertain);
     };
-    state.pending = { nonce, op, terminal, reject: revoke };
+    state.pending = { nonce, op, terminal, kind: 'banner', reject: revoke };
     try {
       sent = true;
       terminal.sendText(command, true);
