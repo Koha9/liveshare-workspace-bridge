@@ -2,7 +2,7 @@
 
 **English** | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [日本語](README.ja.md)
 
-Work in a connected VS Code Live Share Guest workspace through local Windows IPC, without HTTP ports or copied tokens.
+Let AI agents work in a connected VS Code Live Share Guest workspace. Agents reach the extension through a local MCP server and a local Windows named pipe, which opens no network ports. The optional Host channel uses a Live Share forwarded loopback port with a per-helper token.
 
 ## Features
 
@@ -22,7 +22,7 @@ Windows, VS Code 1.101+ with Live Share, and Node.js are required. Any agent tha
 
 The [MCP guide](docs/MCP.md) covers per-agent setup, the tool list and result semantics. MCP is the only agent interface.
 
-Host features need a connected shared RW Windows PowerShell and the relevant permissions; search/patches also need Host ripgrep/Git. Terminal access defaults off. See [settings](docs/SETTINGS.md).
+Host features need a connected shared RW Windows PowerShell, Host access (`host.enabled`, off by default) and the relevant permissions; search/patches also need Host ripgrep/Git. The shared terminal starts a Host helper once, and the Host then runs "Live Share: Share Server" once for the port the bridge shows. See [settings](docs/SETTINGS.md).
 
 ## Guides
 

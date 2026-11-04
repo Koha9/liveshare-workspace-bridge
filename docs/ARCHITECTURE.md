@@ -5,6 +5,7 @@
 [Documentation](README.md)
 
 - extension.cjs owns local IPC (owner-only by default), lifecycle and English permission status.
+- registry-cleanup.cjs runs on activation and removes discovery records left by exited windows (matching file name, id, pid and pipe name); links and other files are left alone. Discovery in cli.cjs reports such records as `stale` probes.
 - permissions.cjs is the request authorization layer; it reads live User/machine settings before dispatch and Host send. Agent endpoints cannot update permissions.
 - workspace.cjs owns document versions, dirty-buffer checks, text preflight, language edits and targeted saves. Host mutations keep affected model guards until normalized content matches.
 - host-channel.cjs serializes Host requests, starts the Host helper once through the shared terminal (verified by a random bootstrap file), waits in the background for the forwarded port and sends each request over loopback TCP (host-transport-tcp.cjs) with a per-helper token and nonce. host-terminal.cjs selects the shared RW terminal; host-bootstrap.cjs renders the helper and reads its listening banner. No request is typed into the terminal.

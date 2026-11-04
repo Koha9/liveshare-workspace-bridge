@@ -4,7 +4,7 @@
 
 Live Share Workspace Bridge ships a Model Context Protocol (MCP) server. Your agent starts it as a local stdio process on the Guest machine. The server reaches the running VS Code extension through the bridge's local Windows named pipe and opens no network ports.
 
-MCP is the supported agent interface. Any MCP client that can start a stdio server can use it, for example Claude Code, Codex or the VS Code built-in agent.
+MCP is the only agent interface. Any MCP client that can start a stdio server can use it, for example Claude Code, Codex or the VS Code built-in agent.
 
 ## Setup
 
@@ -52,9 +52,22 @@ The extension registers the server with VS Code under the name "Live Share Works
 
 Ask the agent to call `lswb_list_workspaces`. It returns the shared roots. Every other tool takes the exact root `uri` (a `vsls:` URI) as its `workspace` argument.
 
+### Discovery results
+
+`lswb_list_workspaces` returns `status`, `workspaces`, `probes` and `issues`. `status` is one of:
+
+- `ready`: shared roots were found and every record answered;
+- `partial`: shared roots were found, but some records or probes failed;
+- `no_shared_workspace`: a bridge answered but shares no root;
+- `no_records`: no live bridge instance was found.
+
+Discovery failures (`discovery_access_denied`, `discovery_unavailable`, `discovery_invalid_registry`) are returned as tool errors.
+
+A reloaded or crashed VS Code window can leave its discovery record behind. When its pipe is missing and its owner process has exited, the probe is reported with `status: "stale"` and `ownerProcess: "exited"`. It does not make discovery `partial`, and the extension removes such records the next time it activates.
+
 ## Tools
 
-The table lists the 36 tools in v0.2.4. Each tool's MCP description holds the full contract. Every tool is still subject to the bridge permission settings.
+The table lists the 36 tools in v0.3.0. Each tool's MCP description holds the full contract. Every tool is still subject to the bridge permission settings.
 
 - **Modifies files**: whether the tool can change workspace files.
 - **Host channel**: whether the tool needs the optional Host channel described in [Host tools](#host-tools).
@@ -105,6 +118,7 @@ Successful results come back as structured content. Failures set `isError` and c
 - **Applied versus saved.** Edit tools report `applied` (VS Code accepted the edit into the document) separately from per-document save results (`saved`, `dirty`). A result can be applied but not saved. Normal edits save only their targets.
 - **`transport_outcome_unknown`.** The request reached the bridge, but its outcome was not confirmed. A mutation may already have happened. Inspect the target before you retry, for example with `lswb_read_file`, `lswb_stat` or `lswb_host_stat`. The server never replays a mutation automatically. `transport_unavailable` means the request was not sent.
 - **`workspace_changed`** (also `workspace_mismatch`, `instance_mismatch`, `epoch_mismatch`). The workspace binding is stale: the shared session, VS Code instance or bridge epoch changed. Call `lswb_list_workspaces` again and use the new root `uri`. If the failed call was a mutation, inspect the target first.
+- **`not_found`.** `lswb_read_file` fails with `not_found` when the file does not exist. In `lswb_read_many`, only that entry fails and the other files are still returned.
 - **Search is incomplete by design.** Host search and find cover saved Host files only. Check `complete`, `truncated` and `unsavedDocuments` before you rely on a result.
 
 ### Host tools
@@ -136,7 +150,7 @@ The Guest IPC helper forwards one request at a time. That is why `lswb_host_bind
 
 ## MCP and the CLI
 
-- The MCP server is the only agent interface. The Codex skill was removed in 0.3.0.
+- The MCP server is the only agent interface. The former Codex skill was removed in 0.3.0.
 - `cli.cjs` is a troubleshooting tool for people. It keeps `instances`, `diagnose` and pinned raw JSON requests. Its upload, download and apply-patch commands were removed; use `lswb_upload_file` and `lswb_apply_patch_file`.
 - The MCP server reuses the `cli.cjs` local transport internally.
 

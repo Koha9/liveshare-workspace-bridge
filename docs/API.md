@@ -4,7 +4,7 @@
 
 [Documentation](README.md)
 
-Requests use op, instance, epoch and exact workspace URI. CLI flags can supply the binding fields. Shared paths are relative to the selected root. Replies are `{ok:true,result:...}` or `{ok:false,error:{code,message,details?}}`; still inspect applied/saved, per-file results, complete, truncation, state and exit codes.
+Requests use op, instance, epoch and exact workspace URI, taken from discovery (`lswb_list_workspaces`; see the [MCP guide](MCP.md#discovery-results)). The troubleshooting CLI's raw request flags can supply the binding fields. Shared paths are relative to the selected root. Replies are `{ok:true,result:...}` or `{ok:false,error:{code,message,details?}}`; still inspect applied/saved, per-file results, complete, truncation, state and exit codes.
 
 ## Permissions and Host binding
 
