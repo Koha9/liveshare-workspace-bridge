@@ -29,12 +29,47 @@ const DEFINITIONS = {
   largeTransfers: ['Upload large files', 'Allow chunked Host file uploads. Write Bytes permission also applies. Large downloads are not available because they have not been validated.'],
   hostExec: ['Run Host commands', 'Allow arbitrary commands in a bounded Host child process. Requires all other operation permissions because raw commands cannot enforce per-operation restrictions.']
 };
+// Operations that share the permission of a base operation.
 const ALIASES = {
-  readMany: 'read', providerRead: 'read', searchSnapshot: 'search', searchResults: 'search', findFilesSnapshot: 'findFiles',
-  hostStat: 'stat', hostJobPoll: 'hostExec', hostJobCancel: 'hostExec', hostJobForget: 'hostExec',
-  transferOpenRead: 'largeTransfers', transferBeginWrite: 'largeTransfers', transferRead: 'largeTransfers', transferWrite: 'largeTransfers', transferCommit: 'largeTransfers', transferAbort: 'largeTransfers'
+  readMany: 'read',
+  providerRead: 'read',
+  searchSnapshot: 'search',
+  searchResults: 'search',
+  findFilesSnapshot: 'findFiles',
+  hostStat: 'stat',
+  hostJobPoll: 'hostExec',
+  hostJobCancel: 'hostExec',
+  hostJobForget: 'hostExec',
+  transferOpenRead: 'largeTransfers',
+  transferBeginWrite: 'largeTransfers',
+  transferRead: 'largeTransfers',
+  transferWrite: 'largeTransfers',
+  transferCommit: 'largeTransfers',
+  transferAbort: 'largeTransfers',
 };
-const HOST_OPERATIONS = new Set(['hostBind', 'hostStat', 'copy', 'copyDirectory', 'search', 'findFiles', 'applyPatch', 'readBytes', 'writeBytes', 'hostExec', 'hostJobPoll', 'hostJobCancel', 'hostJobForget', ...Object.keys(ALIASES).filter(x => x.startsWith('transfer'))]);
+const TRANSFER_OPERATIONS = Object.keys(ALIASES).filter(x => x.startsWith('transfer'));
+const HOST_OPERATIONS = new Set([
+  'hostBind',
+  'hostStat',
+  'copy',
+  'copyDirectory',
+  'search',
+  'findFiles',
+  'applyPatch',
+  'readBytes',
+  'writeBytes',
+  'hostExec',
+  'hostJobPoll',
+  'hostJobCancel',
+  'hostJobForget',
+  ...TRANSFER_OPERATIONS,
+]);
+// Document mutations that always save their targets.
+const SAVING_OPERATIONS = ['create', 'write', 'edit', 'renameSymbol', 'format'];
+const DOWNLOAD_OPERATIONS = ['transferOpenRead', 'transferRead'];
+const RAW_COMMAND_OPERATIONS = ['hostExec', 'hostJobPoll', 'hostJobCancel', 'hostJobForget'];
+// Permissions whose operations run on the Host and need host.enabled.
+const HOST_BACKED_PERMISSIONS = ['copy', 'copyDirectory', 'search', 'findFiles', 'applyPatch', 'readBytes', 'writeBytes', 'largeTransfers', 'hostExec'];
 // Renamed in 0.3.0. A legacy key is read for one version, only while its new
 // key is not set explicitly. User settings are never rewritten.
 const RENAMED_SETTINGS = {
@@ -52,7 +87,8 @@ function isExplicit(config, key) {
     return config?.get(key) !== undefined;
   }
   const inspected = config.inspect(key);
-  return [inspected?.globalValue, inspected?.workspaceValue, inspected?.workspaceFolderValue].some(x => x !== undefined);
+  const values = [inspected?.globalValue, inspected?.workspaceValue, inspected?.workspaceFolderValue];
+  return values.some(x => x !== undefined);
 }
 
 function hasUserValue(config, key) {
@@ -104,26 +140,99 @@ function createPermissions(vscode) {
       .filter(key => usesLegacy(config, key))
       .map(key => RENAMED_SETTINGS[key]);
   }
-  function enabled(key) { return value('permissions.' + key, true); }
-  function reason(op) {
-    if (!value('agent.enabled', true)) return { code: 'agent_access_disabled', message: 'Agent access is disabled in Live Share Workspace Bridge settings.' };
-    const key = ALIASES[op] || op;
-    if (DEFINITIONS[key] && !enabled(key)) return { code: 'operation_disabled', message: `Permission disabled: ${key}.`, permission: key };
-    if (['create', 'write', 'edit', 'renameSymbol', 'format'].includes(op) && !enabled('save')) return { code: 'operation_disabled', message: 'This operation saves documents; Save Documents permission is disabled.', permission: 'save' };
-    if (HOST_OPERATIONS.has(op) && !value('host.enabled', false)) return { code: 'host_access_disabled', message: 'Host access is disabled. Enable Allow Host Access (liveshareWorkspaceBridge.host.enabled) manually in settings.' };
-    if (['transferOpenRead','transferRead'].includes(op)) return { code: 'feature_unavailable', message: 'Large downloads are not available: they have not been validated. Use bounded readBytes for a small file; do not emulate a large download by repeatedly calling it.' };
-    if (['hostExec', 'hostJobPoll', 'hostJobCancel', 'hostJobForget'].includes(op)) {
-      const disabled = Object.keys(DEFINITIONS).filter(x => x !== 'hostExec' && !enabled(x));
-      if (disabled.length) return { code: 'raw_commands_restricted', message: 'Raw Host commands are unavailable while individual operation permissions are restricted.', disabledPermissions: disabled };
-    }
-    return null;
+  function enabled(key) {
+    return value('permissions.' + key, true);
   }
-  function assert(op) { const denied = reason(op); if (denied) fail(denied.code, denied.message, denied); }
-  function snapshot(operations) {
+  function agentDenial() {
+    if (value('agent.enabled', true)) {
+      return null;
+    }
     return {
-      agentEnabled: value('agent.enabled', true), hostEnabled: value('host.enabled', false),
-      configured: Object.fromEntries(Object.keys(DEFINITIONS).map(x => [x, enabled(x)])),
-      effective: Object.fromEntries(operations.filter(x => !['info', 'hostStatus'].includes(x)).map(x => [x, { allowed: !reason(x), reason: reason(x) }]))
+      code: 'agent_access_disabled',
+      message: 'Agent access is disabled in Live Share Workspace Bridge settings.',
+    };
+  }
+  function permissionDenial(key) {
+    if (!DEFINITIONS[key] || enabled(key)) {
+      return null;
+    }
+    return {
+      code: 'operation_disabled',
+      message: `Permission disabled: ${key}.`,
+      permission: key,
+    };
+  }
+  function saveDenial(op) {
+    if (!SAVING_OPERATIONS.includes(op) || enabled('save')) {
+      return null;
+    }
+    return {
+      code: 'operation_disabled',
+      message: 'This operation saves documents; Save Documents permission is disabled.',
+      permission: 'save',
+    };
+  }
+  function hostDenial(op) {
+    if (!HOST_OPERATIONS.has(op) || value('host.enabled', false)) {
+      return null;
+    }
+    return {
+      code: 'host_access_disabled',
+      message: 'Host access is disabled. Enable Allow Host Access (liveshareWorkspaceBridge.host.enabled) manually in settings.',
+    };
+  }
+  function downloadDenial(op) {
+    if (!DOWNLOAD_OPERATIONS.includes(op)) {
+      return null;
+    }
+    return {
+      code: 'feature_unavailable',
+      message: 'Large downloads are not available: they have not been validated. Use bounded readBytes for a small file; do not emulate a large download by repeatedly calling it.',
+    };
+  }
+  // Raw commands cannot honor per-operation limits, so any disabled permission blocks them.
+  function rawCommandDenial(op) {
+    if (!RAW_COMMAND_OPERATIONS.includes(op)) {
+      return null;
+    }
+    const disabled = Object.keys(DEFINITIONS).filter(x => x !== 'hostExec' && !enabled(x));
+    if (!disabled.length) {
+      return null;
+    }
+    return {
+      code: 'raw_commands_restricted',
+      message: 'Raw Host commands are unavailable while individual operation permissions are restricted.',
+      disabledPermissions: disabled,
+    };
+  }
+  // The first denial wins; the order of these checks is part of the API.
+  function reason(op) {
+    return agentDenial()
+      || permissionDenial(ALIASES[op] || op)
+      || saveDenial(op)
+      || hostDenial(op)
+      || downloadDenial(op)
+      || rawCommandDenial(op)
+      || null;
+  }
+  function assert(op) {
+    const denied = reason(op);
+    if (denied) {
+      fail(denied.code, denied.message, denied);
+    }
+  }
+  function effectiveAccess(op) {
+    const denied = reason(op);
+    return { allowed: !denied, reason: denied };
+  }
+  function snapshot(operations) {
+    const configured = Object.keys(DEFINITIONS).map(x => [x, enabled(x)]);
+    const checked = operations.filter(x => !['info', 'hostStatus'].includes(x));
+    return {
+      agentEnabled: value('agent.enabled', true),
+      hostEnabled: value('host.enabled', false),
+      configured: Object.fromEntries(configured),
+      effective: Object.fromEntries(checked.map(x => [x, effectiveAccess(x)])),
     };
   }
   return { assert, reason, enabled, value, snapshot, legacySettingsInUse };
@@ -195,6 +304,29 @@ function legacyHostProperties(current) {
   return properties;
 }
 
+function transferProperties() {
+  return {
+    [`${NAMESPACE}.transfer.chunkBytes`]: {
+      type: 'integer',
+      default: 32768,
+      minimum: 1024,
+      maximum: 65536,
+      scope: 'machine',
+      order: 7,
+      description: 'Maximum raw bytes in one transfer chunk.',
+    },
+    [`${NAMESPACE}.transfer.idleTimeoutMs`]: {
+      type: 'integer',
+      default: 120000,
+      minimum: 10000,
+      maximum: 900000,
+      scope: 'machine',
+      order: 8,
+      description: 'Idle lifetime of a Host transfer handle. Expired handles and owned upload staging files are released automatically.',
+    },
+  };
+}
+
 function portForwardProperties() {
   return {
     [`${NAMESPACE}.host.guestPort`]: {
@@ -241,7 +373,16 @@ function configurationProperties() {
       order: 9,
       markdownDescription: '**IPC Access Mode** — Trust applies to every process under allowed accounts, not only Codex. Calls use bridge permissions outside Codex filesystem sandbox limits. Host access is independent; when enabled it may allow Host commands. Changes restart the bridge; rediscover afterward. Use Configure IPC Access to choose users. The former allLocalUsers value was removed in 0.3.0; a stored value runs as ownerOnly and is not rewritten.',
     },
-    [`${NAMESPACE}.ipc.selectedUserSids`]: {type:'array',items:{type:'string',pattern:'^S-1-5-21-[0-9]+-[0-9]+-[0-9]+-[0-9]+$'},uniqueItems:true,maxItems:256,default:[],scope:'machine',order:10,markdownDescription:'**Selected Local Account SIDs** — Used only by selectedUsers. Configure IPC Access displays names but saves stable SIDs. Renames keep access; deleted/recreated accounts are not substituted. Invalid, foreign and unavailable SIDs are never granted.'},
+    [`${NAMESPACE}.ipc.selectedUserSids`]: {
+      type: 'array',
+      items: { type: 'string', pattern: '^S-1-5-21-[0-9]+-[0-9]+-[0-9]+-[0-9]+$' },
+      uniqueItems: true,
+      maxItems: 256,
+      default: [],
+      scope: 'machine',
+      order: 10,
+      markdownDescription: '**Selected Local Account SIDs** — Used only by selectedUsers. Configure IPC Access displays names but saves stable SIDs. Renames keep access; deleted/recreated accounts are not substituted. Invalid, foreign and unavailable SIDs are never granted.',
+    },
     [`${NAMESPACE}.ipc.allowCodexSandboxClients`]: {
       type: 'boolean',
       default: false,
@@ -250,18 +391,51 @@ function configurationProperties() {
       deprecationMessage: 'Use IPC Access Mode. A previously enabled legacy setting migrates once to selectedUsers and pinned local account SIDs.',
       markdownDescription: 'Legacy v0.2.1 compatibility only. Ignored when IPC Access Mode is explicitly configured. Migration pins the two existing sandbox accounts by SID; it does not create accounts or broaden trust.',
     },
-    [`${NAMESPACE}.agent.enabled`]: { type: 'boolean', default: true, scope: 'machine', order: 1, markdownDescription: '**Allow Agent Access** — Master switch for all shared-workspace operations. Disabling it takes effect on subsequent requests.' },
+    [`${NAMESPACE}.agent.enabled`]: {
+      type: 'boolean',
+      default: true,
+      scope: 'machine',
+      order: 1,
+      markdownDescription: '**Allow Agent Access** — Master switch for all shared-workspace operations. Disabling it takes effect on subsequent requests.',
+    },
     ...hostAccessProperties(),
-    [`${NAMESPACE}.transfer.chunkBytes`]: { type: 'integer', default: 32768, minimum: 1024, maximum: 65536, scope: 'machine', order: 7, description: 'Maximum raw bytes in one transfer chunk.' },
-    [`${NAMESPACE}.transfer.idleTimeoutMs`]: { type: 'integer', default: 120000, minimum: 10000, maximum: 900000, scope: 'machine', order: 8, description: 'Idle lifetime of a Host transfer handle. Expired handles and owned upload staging files are released automatically.' },
+    ...transferProperties(),
     ...portForwardProperties(),
   };
   Object.assign(properties, legacyHostProperties(properties));
+  Object.assign(properties, permissionProperties());
+  return properties;
+}
+
+function hostLinkNote(key) {
+  if (!HOST_BACKED_PERMISSIONS.includes(key)) {
+    return '';
+  }
+  return ' Host-backed operations also require #liveshareWorkspaceBridge.host.enabled#. Their effective access is off while Host access is off; this configured preference is retained.';
+}
+
+// One boolean switch per operation, ordered after the general settings.
+function permissionProperties() {
+  const properties = {};
   let order = 20;
   for (const [key, [label, description]] of Object.entries(DEFINITIONS)) {
-    const linked=['copy','copyDirectory','search','findFiles','applyPatch','readBytes','writeBytes','largeTransfers','hostExec'].includes(key) ? ' Host-backed operations also require #liveshareWorkspaceBridge.host.enabled#. Their effective access is off while Host access is off; this configured preference is retained.' : '';
-    properties[`${NAMESPACE}.permissions.${key}`] = { type: 'boolean', default: true, scope: 'machine', order: order++, markdownDescription: `**${label}** — ${description}${linked}` };
+    properties[`${NAMESPACE}.permissions.${key}`] = {
+      type: 'boolean',
+      default: true,
+      scope: 'machine',
+      order: order++,
+      markdownDescription: `**${label}** — ${description}${hostLinkNote(key)}`,
+    };
   }
   return properties;
 }
-module.exports = { NAMESPACE, RENAMED_SETTINGS, readSetting, DEFINITIONS, ALIASES, HOST_OPERATIONS, createPermissions, configurationProperties };
+module.exports = {
+  NAMESPACE,
+  RENAMED_SETTINGS,
+  readSetting,
+  DEFINITIONS,
+  ALIASES,
+  HOST_OPERATIONS,
+  createPermissions,
+  configurationProperties,
+};
