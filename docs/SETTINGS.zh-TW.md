@@ -2,6 +2,8 @@
 
 [English](SETTINGS.md) | [简体中文](SETTINGS.zh-CN.md) | **繁體中文** | [日本語](SETTINGS.ja.md)
 
+[文件](README.zh-TW.md)
+
 本文對應目前倉庫 schema，已安裝發佈版可能有較少或不同的命令／欄位，以其版本、Settings UI 和匹配的發佈資產為準。以下所有鍵都有 liveshareWorkspaceBridge. 前綴，schema scope 為 machine（VS Code 允許的 User／Remote 設定，不是 Workspace／Folder）。UI 擴充套件在 Windows Guest 執行，變更 Host 機器的設定不是同一件事。IPC 信任只讀明確的 User global 值，忽略工作區與擴充套件提供的預設值。
 
 ## 一般、IPC 與 Host 參數

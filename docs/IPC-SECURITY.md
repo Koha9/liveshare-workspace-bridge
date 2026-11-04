@@ -2,6 +2,7 @@
 
 **English** | [简体中文](IPC-SECURITY.zh-CN.md) | [繁體中文](IPC-SECURITY.zh-TW.md) | [日本語](IPC-SECURITY.ja.md)
 
+[Documentation](README.md)
 
 Configure English User settings through **Live Share Workspace Bridge: Configure IPC Access**. Only explicit User values control trust; workspace settings and contributed defaults cannot expand it.
 

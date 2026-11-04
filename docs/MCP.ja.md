@@ -1,6 +1,6 @@
 # MCP サーバー
 
-[English](MCP.md) | **日本語**
+[English](MCP.md) | [简体中文](MCP.zh-CN.md) | [繁體中文](MCP.zh-TW.md) | **日本語**
 
 [ドキュメント](README.ja.md)
 

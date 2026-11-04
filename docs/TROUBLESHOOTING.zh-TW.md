@@ -18,7 +18,7 @@ broken pipe 清理：用戶端逾時後，遲到回應的寫入失敗不再讓�
 
 先前已 ready 的 IPC 輔助程式結束後，會在 1／2／4 秒後重新啟動，連續不穩定時最多三次；穩定 ready 一分鐘後重設次數。不需要焦點事件或 Host 輪詢。啟動／原則／存取失敗及明確的 Stop 不會自動重新啟動。傳輸復原保留 instance／epoch、Host 工作與不確定狀態，循序處理進行中的工作，絕不重送已送出的操作。
 
-仍斷線時，檢查 `lswb_status`（若你是手動診斷，則執行一次 CLI `diagnose`）。任務已授權復原連線時，agent 可在目標 Guest 視窗的命令選擇區執行 **Live Share Workspace Bridge: Restart Connection**（`liveshareWorkspaceBridge.restart`）：按 Ctrl+Shift+P，或按 Ctrl+P 後輸入 `>`。沒有可用的 UI 工具時，只請使用者執行一次。手動重新啟動會改變 instance／epoch，並使 Host 工作／傳輸控制代碼失效；之後依根目錄名稱與完整 URI 重新探索一次。Host 不確定狀態仍保留：確認 Host 已復原後才能確認。不可繞過遭拒的存取、原則失敗或刻意的 Stop，也不可重送結果未知的修改。IPC 復原不會重新加入 Live Share，也不會修復缺失的 Host 終端。
+仍斷線時，檢查 `lswb_status`（若你是手動診斷，則執行一次 CLI `diagnose`）。任務已授權復原連線時，agent 可在目標 Guest 視窗的命令選擇區執行 **Live Share Workspace Bridge: Restart Connection**（`liveshareWorkspaceBridge.restart`）：按 Ctrl+Shift+P，或按 Ctrl+P 後輸入 `>`。沒有可用的 UI 工具時，只請使用者執行一次。手動重新啟動會改變 instance／epoch，並使 Host 工作／傳輸控制代碼失效；之後依根目錄名稱與完整 URI 重新探索一次。Host 不確定狀態仍保留：先確認 Host 已復原，再回報復原完成（acknowledgeRecovery）。不可繞過遭拒的存取、原則失敗或刻意的 Stop，也不可重送結果未知的修改。IPC 復原不會重新加入 Live Share，也不會修復缺失的 Host 終端。
 
 ## Host 終端缺失或無回應
 

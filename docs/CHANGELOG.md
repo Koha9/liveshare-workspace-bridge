@@ -2,6 +2,8 @@
 
 **English** | [简体中文](CHANGELOG.zh-CN.md) | [繁體中文](CHANGELOG.zh-TW.md) | [日本語](CHANGELOG.ja.md)
 
+[Documentation](README.md)
+
 - 0.3.0
   - Upgrade notes: the `terminal.*` settings are now `host.*`; old User values are still read for one version while the new key is unset, and nothing is rewritten, so rename them yourself. A stored `allLocalUsers` IPC mode runs as ownerOnly with one notice. The Codex skill is gone: add the MCP server to your agent with **Copy MCP Server Configuration**. Host features now need the Host to run "Live Share: Share Server" once for the helper port the bridge shows. VS Code 1.101 or later is required.
   - Added: an MCP stdio server with 36 `lswb_` tools, shipped in the VSIX (`mcp-server.cjs`, `mcp-tools.cjs`), a stable launcher at `~/.liveshare-local/mcp-server.cjs` that follows the running extension version, and the **Copy MCP Server Configuration** command. Copied configuration uses forward-slash paths. The build fails if a packaged module requires a file that is not packaged. New [MCP guide](MCP.md).

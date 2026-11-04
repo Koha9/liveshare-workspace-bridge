@@ -2,6 +2,8 @@
 
 [English](STARTUP-DIAGNOSTICS.md) | [简体中文](STARTUP-DIAGNOSTICS.zh-CN.md) | **繁體中文** | [日本語](STARTUP-DIAGNOSTICS.ja.md)
 
+[文件](README.zh-TW.md)
+
 使用 **Live Share Workspace Bridge: Show Startup Diagnostics** 在既有 Output 通道查看安全的目前快照。CLI `diagnose` 包含 `startupDiagnostics`；即使沒有 IPC 執行個體回應，只要既有檔案系統權限允許讀取啟動資料存放區即可取得。它不啟動探測、不繫結 Host 終端、不重試命令，也不變更原則／權限。缺少或無法存取的診斷維持 unknown；請使用者提供安全摘要，而不是擴大存取。
 
 摘要刻意限縮於：Guest 本機存取設定／帳戶列舉／IPC 輔助程式啟動。它不是通用的 Host／Guest shell 錯誤框架。它記錄所要求的執行檔類別、attempt／epoch、觀察時間與有界的已分類事件。實際 basename／版本／edition 與有效原則 scope 只在已執行的輔助程式送出 ready 後才回報。實際身分與外部探測身分的比較仍為 unknown。不要從另一個 agent 沙箱 shell 推斷輔助程式的 CurrentUser 原則。

@@ -43,7 +43,19 @@ RUNTIME_FILES = (
     "mcp-tools.cjs",
 )
 RELATIVE_REQUIRE = re.compile(r"""require\(\s*['"](\.\.?/[^'"]+)['"]\s*\)""")
-DOCUMENT_NAMES = ("README", "USAGE", "API", "ARCHITECTURE", "DEVELOPMENT", "TROUBLESHOOTING", "IPC-SECURITY", "STARTUP-DIAGNOSTICS", "CHANGELOG", "SETTINGS")
+DOCUMENT_NAMES = (
+    "README",
+    "USAGE",
+    "API",
+    "ARCHITECTURE",
+    "DEVELOPMENT",
+    "TROUBLESHOOTING",
+    "IPC-SECURITY",
+    "STARTUP-DIAGNOSTICS",
+    "CHANGELOG",
+    "SETTINGS",
+    "MCP",
+)
 LOCALES = ("", ".zh-CN", ".zh-TW", ".ja")
 
 

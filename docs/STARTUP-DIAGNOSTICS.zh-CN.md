@@ -2,6 +2,8 @@
 
 [English](STARTUP-DIAGNOSTICS.md) | **简体中文** | [繁體中文](STARTUP-DIAGNOSTICS.zh-TW.md) | [日本語](STARTUP-DIAGNOSTICS.ja.md)
 
+[文档](README.zh-CN.md)
+
 使用 **Live Share Workspace Bridge: Show Startup Diagnostics** 在现有 Output 通道中查看安全的当前快照。CLI `diagnose` 包含 `startupDiagnostics`；即使没有 IPC 实例响应，只要现有文件系统权限允许读取启动存储，也会包含。它不启动探测、不绑定 Host 终端、不重试命令，也不改变策略／权限。缺失或无法访问的诊断保持 unknown；请用户提供安全摘要，而不是扩大访问。
 
 摘要的范围有意收窄：只涉及 Guest 本机访问设置／账号枚举／IPC 辅助进程启动，不是通用的 Host／Guest shell 错误框架。它记录请求的可执行文件类别、attempt／epoch、观察时间和有界的分类事件。实际的 basename／版本／edition 和有效策略 scope 只有在已运行的辅助进程发送 ready 之后才报告。实际身份与外部探测身份的比较仍为 unknown。不要根据另一个 agent 沙箱 shell 推断辅助进程的 CurrentUser 策略。

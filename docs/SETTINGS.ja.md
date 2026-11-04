@@ -2,6 +2,8 @@
 
 [English](SETTINGS.md) | [简体中文](SETTINGS.zh-CN.md) | [繁體中文](SETTINGS.zh-TW.md) | **日本語**
 
+[ドキュメント](README.ja.md)
+
 このリファレンスは現在のリポジトリの schema を説明します。インストール済みのリリースでは、コマンドが少ない／異なる場合があります。そのバージョン、Settings UI、対応するリリース資産を正としてください。以下のキーはすべて接頭辞 liveshareWorkspaceBridge. を持ち、schema scope は machine です（VS Code が許す User/Remote 設定で、Workspace/Folder ではありません）。UI 拡張は Windows Guest 上で実行されるため、Host マシンの設定を変更することとは異なります。IPC の信頼は明示的な User global 値を読み取り、ワークスペースや拡張が提供する既定値は無視します。
 
 ## 一般／IPC／Host パラメーター

@@ -37,11 +37,34 @@ class ReleasePackageTests(unittest.TestCase):
         stems = (
             'README', 'USAGE', 'API', 'ARCHITECTURE', 'DEVELOPMENT',
             'TROUBLESHOOTING', 'IPC-SECURITY', 'STARTUP-DIAGNOSTICS',
-            'CHANGELOG', 'SETTINGS',
+            'CHANGELOG', 'SETTINGS', 'MCP',
         )
         locales = ('', '.zh-CN', '.zh-TW', '.ja')
         expected = {f'extension/docs/{stem}{locale}.md' for stem in stems for locale in locales}
         self.assertEqual({name for name in self.members if name.startswith('extension/docs/')}, expected)
+
+    def test_reader_documents_have_language_switch_and_index_link(self):
+        # Line 3 switches between all four locales; line 5 returns to the docs index.
+        labels = {'': 'English', '.zh-CN': '简体中文', '.zh-TW': '繁體中文', '.ja': '日本語'}
+        index_labels = {'': 'Documentation', '.zh-CN': '文档', '.zh-TW': '文件', '.ja': 'ドキュメント'}
+        for stem in build.DOCUMENT_NAMES:
+            for locale, label in labels.items():
+                name = f'{stem}{locale}.md'
+                lines = (build.ROOT / 'docs' / name).read_text(encoding='utf-8').split('\n')
+                with self.subTest(document=name):
+                    self.assertEqual(lines[2], self.language_switch(stem, locale, labels))
+                    if stem != 'README':
+                        self.assertTrue(lines[4].startswith(f'[{index_labels[locale]}](README{locale}.md)'), lines[4])
+
+    @staticmethod
+    def language_switch(stem, current, labels):
+        entries = []
+        for locale, label in labels.items():
+            if locale == current:
+                entries.append(f'**{label}**')
+            else:
+                entries.append(f'[{label}]({stem}{locale}.md)')
+        return ' | '.join(entries)
 
     def test_mcp_server_ships_with_its_require_chain(self):
         for name in ('mcp-server.cjs', 'mcp-tools.cjs', 'cli.cjs', 'package.json'):
