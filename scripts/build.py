@@ -25,6 +25,7 @@ RUNTIME_FILES = (
     "local-accounts.cs",
     "ipc-access.cjs",
     "startup-diagnostics.cjs",
+    "registry-cleanup.cjs",
     "permissions.cjs",
     "host-channel.cjs",
     "host-bootstrap.cjs",
