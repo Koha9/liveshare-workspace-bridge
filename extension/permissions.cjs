@@ -77,20 +77,25 @@ function usesLegacy(config, key) {
   return Boolean(legacy) && !isExplicit(config, key) && hasUserValue(config, legacy);
 }
 
+// Reads a bridge setting from a liveshareWorkspaceBridge configuration,
+// falling back to a renamed key's legacy User value.
+function readSetting(config, key, fallback) {
+  if (!usesLegacy(config, key)) {
+    return checkedValue(config?.get(key), fallback);
+  }
+  const legacy = RENAMED_SETTINGS[key];
+  if (typeof config.inspect === 'function') {
+    return checkedValue(config.inspect(legacy).globalValue, fallback);
+  }
+  return checkedValue(config.get(legacy), fallback);
+}
+
 function createPermissions(vscode) {
   function configuration() {
     return vscode.workspace.getConfiguration?.(NAMESPACE);
   }
   function value(key, fallback) {
-    const config = configuration();
-    if (!usesLegacy(config, key)) {
-      return checkedValue(config?.get(key), fallback);
-    }
-    const legacy = RENAMED_SETTINGS[key];
-    if (typeof config.inspect === 'function') {
-      return checkedValue(config.inspect(legacy).globalValue, fallback);
-    }
-    return checkedValue(config.get(legacy), fallback);
+    return readSetting(configuration(), key, fallback);
   }
   // Legacy keys currently read in place of their new names, for a one-line notice.
   function legacySettingsInUse() {
@@ -259,4 +264,4 @@ function configurationProperties() {
   }
   return properties;
 }
-module.exports = { NAMESPACE, RENAMED_SETTINGS, DEFINITIONS, ALIASES, HOST_OPERATIONS, createPermissions, configurationProperties };
+module.exports = { NAMESPACE, RENAMED_SETTINGS, readSetting, DEFINITIONS, ALIASES, HOST_OPERATIONS, createPermissions, configurationProperties };

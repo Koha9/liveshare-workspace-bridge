@@ -59,7 +59,7 @@ function createHostOperations({ vscode, host, permissions, resolve, rejectDirty,
     if(r.op==='hostExec'){
       if(typeof r.command!=='string'||!r.command||r.command.length>8000)fail('invalid_argument','command must contain 1..8000 characters.');
       resolve(r,r.cwd??'',true);
-      const waitMs=integer(r.waitMs??1000,'waitMs',0,5000), timeoutMs=integer(r.timeoutMs??permissions.value('terminal.commandTimeoutMs',120000),'timeoutMs',1000,3600000);
+      const waitMs=integer(r.waitMs??1000,'waitMs',0,5000), timeoutMs=integer(r.timeoutMs??permissions.value('host.commandTimeoutMs',120000),'timeoutMs',1000,3600000);
       const affected=r.affectedPaths??[];if(!Array.isArray(affected)||affected.length>100)fail('invalid_argument','affectedPaths must contain at most 100 relative paths.');
       const refreshed=affected.map(filename=>{const target=resolve(r,filename).uri;rejectDirty(target);return noteExternalChange(target,uri);});
       const result=await request({action:'startJob',command:r.command,cwd:r.cwd??'',timeoutMs,waitMs,inspectTextPaths:refreshed.flatMap(f=>f.paths)});

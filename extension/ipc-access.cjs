@@ -1,6 +1,7 @@
 'use strict';
 const path=require('node:path');const{spawn}=require('node:child_process');
 const{classifyStartupStderr}=require('./startup-diagnostics.cjs');
+const{readSetting}=require('./permissions.cjs');
 const MODES=['ownerOnly','selectedUsers'];
 // Removed in 0.3.0. An existing User value runs as the narrower ownerOnly;
 // it is reported, never rewritten, and never passed to the native helper.
@@ -74,7 +75,7 @@ async function configureAccess(vscode,listUsers){
  let sids;
  if(choice.mode==='selectedUsers'){const users=await listUsers();const picked=await vscode.window.showQuickPick(pickerItems(users,selectedSids(config)),{title:'Select Local Accounts',canPickMany:true,placeHolder:'Saved by SID. Deleted/recreated accounts are not substituted by name.'});if(picked===undefined)return false;sids=picked.map(x=>x.sid);}
  if(choice.mode!=='ownerOnly'){
-  const host=config.get('terminal.enabled',false)===true?'Host terminal access is enabled; allowed processes may also run Host commands if other requirements are met.':'Host terminal access remains independently controlled.';
+  const host=readSetting(config,'host.enabled',false)===true?'Host terminal access is enabled; allowed processes may also run Host commands if other requirements are met.':'Host terminal access remains independently controlled.';
   const question='Trust the selected local accounts in this Windows session? Their processes can use bridge permissions outside Codex filesystem sandbox limits. '+host;
   const confirmed=await vscode.window.showWarningMessage(question,{modal:true},'Apply Access Mode');
   if(confirmed!=='Apply Access Mode')return false;

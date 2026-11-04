@@ -925,7 +925,7 @@ async function uploadFile(args) {
 // ---------------------------------------------------------------------------
 
 const HOST_NOTE = 'Uses the Host channel: the Host must share a read/write PowerShell terminal '
-  + 'and terminal.enabled must be on in the bridge settings; check with lswb_host_status.';
+  + 'and host.enabled must be on in the bridge settings; check with lswb_host_status.';
 const HOST_PATH = text('Workspace-relative path with forward slashes, resolved on the Host.');
 const LOCAL_PATH = text('Absolute path on the machine running this MCP server, not a workspace path.');
 const LOCAL_PATH_NOTE = 'localPath is a path on the machine running this MCP server, not a workspace path; '
@@ -948,19 +948,19 @@ const HOST_OPERATION_TOOLS = [
     op: 'hostStatus',
     description: describe(
       'Report whether the Host channel is available and bound for a workspace, plus eligible shared terminal candidates',
-      'and the portForward handshake (state idle, starting, waitingForward, bound, failed or cancelled, with hostPort, guestPort, message and code).',
-      'WHEN TO USE: Before any other Host tool, after a host_channel_uncertain error, and in portForward mode',
+      'and the Host helper handshake (state idle, starting, waitingForward, bound, failed or cancelled, with hostPort, guestPort, message and code).',
+      'WHEN TO USE: Before any other Host tool, after a host_channel_uncertain error, and',
       'repeatedly after lswb_host_bind until bound:true (or the handshake shows failed/cancelled). It answers immediately, even mid-handshake.',
-      'Read-only. The Host channel needs the Host to share a read/write PowerShell terminal and terminal.enabled turned on.',
+      'Read-only. The Host channel needs the Host to share a read/write PowerShell terminal and host.enabled turned on.',
     ),
   }),
   guestTool({
     name: 'lswb_host_bind',
     op: 'hostBind',
     description: describe(
-      'Bind the Host channel to the shared Host terminal for this workspace (a random handshake file verifies the Host root).',
+      'Bind the Host channel for this workspace: the shared Host terminal starts a Host helper once (a random handshake file verifies the Host root) and requests then use a Live Share forwarded port.',
       'WHEN TO USE: When lswb_host_status reports bound:false, or to recover after host_channel_uncertain.',
-      'In portForward mode this is step one of two: it returns bound:false with handshake.state waitingForward, hostPort and next',
+      'This is step one of two: it returns bound:false with handshake.state waitingForward, hostPort and next',
       'once the Host helper listens. Ask the Host to run "Live Share: Share Server" for hostPort, then poll lswb_host_status until bound.',
       'Calling it again during the handshake only reports the same state. Other Host tools return host_handshake_pending meanwhile;',
       'do not retry them to wait. After failed/cancelled, ask the Host to press Ctrl+C on any old helper before binding again.',
@@ -1105,7 +1105,7 @@ const HOST_OPERATION_TOOLS = [
     properties: {
       command: text('PowerShell command, 1..8000 characters.'),
       cwd: text('Workspace-relative working directory. Default the workspace root.'),
-      timeoutMs: int('Child timeout 1000..3600000 ms. Default terminal.commandTimeoutMs.'),
+      timeoutMs: int('Child timeout 1000..3600000 ms. Default host.commandTimeoutMs.'),
       waitMs: int('How long to wait for completion before returning running, 0..5000 ms. Default 1000.'),
       affectedPaths: { type: 'array', items: { type: 'string' }, description: 'Up to 100 workspace-relative paths the command changes.' },
     },

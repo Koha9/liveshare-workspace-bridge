@@ -108,7 +108,7 @@ test('root mutations, stale workspace epoch and instance mismatches fail before 
   assert.equal(f.calls.open, 0); assert.equal(f.calls.delete, 0);
 });
 test('dirty copy targets and unsupported recursive deletes do not trigger IO', async () => {
-  const f = fixture({ source: 'a', target: 'b' }, { 'terminal.enabled': true }); f.docs.get('vsls:/target').isDirty = true;
+  const f = fixture({ source: 'a', target: 'b' }, { 'host.enabled': true }); f.docs.get('vsls:/target').isDirty = true;
   await assert.rejects(f.send({ op: 'copy', path: 'source', to: 'target', overwrite: true }), { code: 'dirty_document' });
   await assert.rejects(f.send({ op: 'delete', path: 'folder', recursive: true }), { code: 'not_supported' });
   assert.equal(f.calls.copy, 0); assert.equal(f.calls.delete, 0);
@@ -136,12 +136,12 @@ test('master and read permissions prevent all file IO, and disabled saves preven
  await assert.rejects(f.send({op:'edit',files:[{path:'a',changes:[{oldText:'value',newText:'new'}]}]}),{code:'operation_disabled'});assert.equal(f.calls.apply,0);
 });
 test('Host-backed search never silently falls back to editor commands when the shared terminal is missing',async()=>{
- const f=fixture({a:'value'},{'terminal.enabled':true});f.vscode.window={terminals:[]};
+ const f=fixture({a:'value'},{'host.enabled':true});f.vscode.window={terminals:[]};
  await assert.rejects(f.send({op:'search',query:'value'}),{code:'host_terminal_required'});assert.equal(f.calls.commands.length,0);assert.equal(f.calls.open,0);
 });
 test('a document version bump alone cannot clear a stale Host edit; no active-editor revert is executed',async()=>{
  let f;const host={request:async(root,op,action)=>{assert.deepEqual(action.inspectTextPaths,['a']);f.docs.get('vsls:/a').version++;return{applied:true,textStates:{a:require('../core.cjs').textHash('new')}};},dispose(){},changed(){}};
- f=fixture({a:'old'},{'terminal.enabled':true},{host});
+ f=fixture({a:'old'},{'host.enabled':true},{host});
  await f.send({op:'applyPatch',patch:'--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new\n'});
  await assert.rejects(f.send({op:'read',path:'a'}),{code:'editor_refresh_pending'});assert.equal(f.calls.commands.length,0);assert.equal(f.calls.providerReads,0);
  f.docs.get('vsls:/a').text='new';f.docs.get('vsls:/a').version++;

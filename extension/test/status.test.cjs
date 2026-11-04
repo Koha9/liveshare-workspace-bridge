@@ -13,7 +13,9 @@ test('status bar links to English settings and follows master/terminal switches 
  t.after(()=>{for(const disposable of context.subscriptions.slice().reverse())disposable.dispose();assert.equal(path.dirname(localHome),os.tmpdir());assert.ok(path.basename(localHome).startsWith('lswb-status-home-'));fs.rmSync(localHome,{recursive:true,force:true});});
  extension.activate(context);assert.equal(item.visible,false);
  sdk.workspace.workspaceFolders=[{name:'Status fixture',uri:new Uri()}];folderChange();assert.equal(item.visible,true);assert.match(item.text,/Guest only/u);assert.equal(item.command,'liveshareWorkspaceBridge.openSettings');
- settings['terminal.enabled']=true;configurationChange({affectsConfiguration:key=>key.includes('terminal')});assert.match(item.text,/Host allowed/u);
+ settings['host.enabled']=true;configurationChange({affectsConfiguration:key=>key.includes('host')});assert.match(item.text,/Host allowed/u);
+ delete settings['host.enabled'];settings['terminal.enabled']=true;configurationChange({affectsConfiguration:key=>key.includes('terminal')});assert.match(item.text,/Host allowed/u);
+ settings['host.enabled']=false;configurationChange({affectsConfiguration:key=>key.includes('host')});assert.match(item.text,/Guest only/u);settings['host.enabled']=true;
  settings['agent.enabled']=false;configurationChange({affectsConfiguration:key=>key.includes('agent.enabled')});assert.match(item.text,/Agent off/u);assert.match(item.tooltip,/disabled/u);
  assert.equal(commands.has('liveshareWorkspaceBridge.openSettings'),true);
 });

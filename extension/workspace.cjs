@@ -279,6 +279,6 @@ function createWorkspaceApi(vscode, identity, services = {}) {
     if (r.epoch !== undefined && r.epoch !== identity.epoch()) fail('workspace_changed', 'Workspace changed while this request was in flight; inspect any dispatched mutation.');
     return result;
   }
-  return { dispatch, roots: rootInfo, permissions, dispose: () => host.dispose(), workspaceChanged: () => { externallyChanged.clear(); host.changed(true); }, terminalClosed: terminal => host.terminalClosed?.(terminal), configurationChanged: event => host.changed(event?.affectsConfiguration?.('liveshareWorkspaceBridge.terminal') || event?.affectsConfiguration?.('liveshareWorkspaceBridge.transfer') || event?.affectsConfiguration?.('liveshareWorkspaceBridge.agent.enabled')) };
+  return { dispatch, roots: rootInfo, permissions, dispose: () => host.dispose(), workspaceChanged: () => { externallyChanged.clear(); host.changed(true); }, terminalClosed: terminal => host.terminalClosed?.(terminal), configurationChanged: event => host.changed(event?.affectsConfiguration?.('liveshareWorkspaceBridge.host') || event?.affectsConfiguration?.('liveshareWorkspaceBridge.terminal') || event?.affectsConfiguration?.('liveshareWorkspaceBridge.transfer') || event?.affectsConfiguration?.('liveshareWorkspaceBridge.agent.enabled')) };
 }
 module.exports = { createWorkspaceApi, OPERATIONS };

@@ -85,3 +85,27 @@ test('removed-mode notice logs, prompts once per session, offers Configure IPC A
 });
 test('confirmed selected-user UI saves SIDs rather than names without changing terminal/legacy permissions',async()=>{const f=fixture({'terminal.enabled':false});let count=0;const sdk={ConfigurationTarget:{Global:1},workspace:{getConfiguration:()=>f.config},window:{showQuickPick:async()=>++count===1?{mode:'selectedUsers'}:[{sid:users[2].Sid,label:'PC\\Renamed'}],showWarningMessage:async()=> 'Apply Access Mode'}};assert.equal(await configureAccess(sdk,async()=>users),true);assert.deepEqual(f.settings['ipc.selectedUserSids'],[users[2].Sid]);assert.equal(f.settings['ipc.accessMode'],'selectedUsers');assert.deepEqual(f.writes,['ipc.selectedUserSids','ipc.accessMode']);assert.equal(f.settings['terminal.enabled'],false);});
 test('account enumeration preserves Unicode names across arbitrary process output chunks',async()=>{const{EventEmitter}=require('node:events'),{PassThrough}=require('node:stream');const child=new EventEmitter();child.stdout=new PassThrough();child.stderr=new PassThrough();child.kill=()=>{};const expected=[{Sid:users[0].Sid,Name:'PC\\测试😀',Disabled:false}],bytes=Buffer.from(JSON.stringify(expected));const offset=bytes.indexOf(Buffer.from('测'));const task=listLocalUsers('unused',()=>child);child.stdout.write(bytes.subarray(0,offset+1));child.stdout.write(bytes.subarray(offset+1,offset+2));child.stdout.end(bytes.subarray(offset+2));child.stderr.end();child.emit('close',0);assert.deepEqual(await task,expected);});
+
+test('the selected-user warning reads Host access from host.enabled before the legacy key', async () => {
+  const warnings = [];
+  const run = async values => {
+    const f = fixture(values);
+    let count = 0;
+    const sdk = {
+      ConfigurationTarget: { Global: 1 },
+      workspace: { getConfiguration: () => f.config },
+      window: {
+        showQuickPick: async () => (++count === 1 ? { mode: 'selectedUsers' } : [{ sid: users[2].Sid }]),
+        showWarningMessage: async message => {
+          warnings.push(message);
+          return undefined;
+        },
+      },
+    };
+    await configureAccess(sdk, async () => users);
+  };
+  await run({ 'host.enabled': true });
+  await run({ 'host.enabled': false, 'terminal.enabled': true });
+  assert.match(warnings[0], /Host terminal access is enabled/u);
+  assert.match(warnings[1], /remains independently controlled/u);
+});
