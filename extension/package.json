@@ -88,28 +88,28 @@
           "order": 1,
           "markdownDescription": "**Allow Agent Access** — Master switch for all shared-workspace operations. Disabling it takes effect on subsequent requests."
         },
-        "liveshareWorkspaceBridge.terminal.enabled": {
+        "liveshareWorkspaceBridge.host.enabled": {
           "type": "boolean",
           "default": false,
           "scope": "machine",
           "order": 2,
-          "markdownDescription": "**Allow Shared Host Terminal Access** — Enable Host-dependent operations. Connection binding creates and removes owned temporary handshake files. Turning this off blocks new Host work without rolling back dispatched work. Child commands retain their configured timeout."
+          "markdownDescription": "**Allow Host Access** — Enable Host-dependent operations. Binding starts a foreground Host helper once through the shared Host terminal and creates and removes an owned temporary handshake file; requests then use a Live Share forwarded port. Turning this off blocks new Host work without rolling back dispatched work. Child commands retain their configured timeout."
         },
-        "liveshareWorkspaceBridge.terminal.name": {
+        "liveshareWorkspaceBridge.host.terminalName": {
           "type": "string",
           "default": "",
           "scope": "machine",
           "order": 3,
-          "description": "Exact name of the shared read/write PowerShell terminal. Leave empty only when there is exactly one eligible Live Share shared terminal. Ordinary Guest terminals are never selected."
+          "description": "Exact name of the shared read/write PowerShell terminal used once to start the Host helper. Leave empty only when there is exactly one eligible Live Share shared terminal. Ordinary Guest terminals are never selected."
         },
-        "liveshareWorkspaceBridge.terminal.hostWorkspacePath": {
+        "liveshareWorkspaceBridge.host.workspacePath": {
           "type": "string",
           "default": "",
           "scope": "machine",
           "order": 4,
           "description": "Optional Host workspace path for the selected shared root. Otherwise the shared PowerShell current directory is verified using a random handshake file. No Host path is guessed."
         },
-        "liveshareWorkspaceBridge.terminal.commandTimeoutMs": {
+        "liveshareWorkspaceBridge.host.commandTimeoutMs": {
           "type": "integer",
           "default": 120000,
           "minimum": 1000,
@@ -118,7 +118,7 @@
           "order": 5,
           "description": "Maximum time for a Host child command. Only the bridge-owned process tree is terminated on timeout."
         },
-        "liveshareWorkspaceBridge.terminal.maxOutputCharacters": {
+        "liveshareWorkspaceBridge.host.maxOutputCharacters": {
           "type": "integer",
           "default": 65536,
           "minimum": 1024,
@@ -126,6 +126,45 @@
           "scope": "machine",
           "order": 6,
           "description": "Maximum retained characters per Host stdout/stderr stream. Excess output is drained and explicitly marked truncated."
+        },
+        "liveshareWorkspaceBridge.terminal.enabled": {
+          "type": "boolean",
+          "default": false,
+          "scope": "machine",
+          "order": 90,
+          "deprecationMessage": "Renamed to liveshareWorkspaceBridge.host.enabled. Still read for one version while host.enabled is not set; the bridge does not change your settings."
+        },
+        "liveshareWorkspaceBridge.terminal.name": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 91,
+          "deprecationMessage": "Renamed to liveshareWorkspaceBridge.host.terminalName. Still read for one version while host.terminalName is not set; the bridge does not change your settings."
+        },
+        "liveshareWorkspaceBridge.terminal.hostWorkspacePath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "order": 92,
+          "deprecationMessage": "Renamed to liveshareWorkspaceBridge.host.workspacePath. Still read for one version while host.workspacePath is not set; the bridge does not change your settings."
+        },
+        "liveshareWorkspaceBridge.terminal.commandTimeoutMs": {
+          "type": "integer",
+          "default": 120000,
+          "minimum": 1000,
+          "maximum": 3600000,
+          "scope": "machine",
+          "order": 93,
+          "deprecationMessage": "Renamed to liveshareWorkspaceBridge.host.commandTimeoutMs. Still read for one version while host.commandTimeoutMs is not set; the bridge does not change your settings."
+        },
+        "liveshareWorkspaceBridge.terminal.maxOutputCharacters": {
+          "type": "integer",
+          "default": 65536,
+          "minimum": 1024,
+          "maximum": 262144,
+          "scope": "machine",
+          "order": 94,
+          "deprecationMessage": "Renamed to liveshareWorkspaceBridge.host.maxOutputCharacters. Still read for one version while host.maxOutputCharacters is not set; the bridge does not change your settings."
         },
         "liveshareWorkspaceBridge.transfer.chunkBytes": {
           "type": "integer",
@@ -199,14 +238,14 @@
           "default": true,
           "scope": "machine",
           "order": 27,
-          "markdownDescription": "**Copy files** — Allow byte-preserving file copies through the shared Host terminal. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Copy files** — Allow byte-preserving file copies on the Host. Host-backed operations also require #liveshareWorkspaceBridge.host.enabled#. Their effective access is off while Host access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.copyDirectory": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 28,
-          "markdownDescription": "**Copy directories** — Allow directory copies through the shared Host terminal. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Copy directories** — Allow directory copies on the Host. Host-backed operations also require #liveshareWorkspaceBridge.host.enabled#. Their effective access is off while Host access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.move": {
           "type": "boolean",
@@ -283,49 +322,49 @@
           "default": true,
           "scope": "machine",
           "order": 39,
-          "markdownDescription": "**Search content** — Allow Host content search and explicitly selected editor snapshots. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Search content** — Allow Host content search and explicitly selected editor snapshots. Host-backed operations also require #liveshareWorkspaceBridge.host.enabled#. Their effective access is off while Host access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.findFiles": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 40,
-          "markdownDescription": "**Find paths** — Allow Host path discovery and explicitly selected provider snapshots. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Find paths** — Allow Host path discovery and explicitly selected provider snapshots. Host-backed operations also require #liveshareWorkspaceBridge.host.enabled#. Their effective access is off while Host access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.applyPatch": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 41,
-          "markdownDescription": "**Apply text patches** — Allow checked Host Git text patches inside the bound workspace. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Apply text patches** — Allow checked Host Git text patches inside the bound workspace. Host-backed operations also require #liveshareWorkspaceBridge.host.enabled#. Their effective access is off while Host access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.readBytes": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 42,
-          "markdownDescription": "**Read bytes** — Allow byte-preserving Host reads and raw-byte hashes. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Read bytes** — Allow byte-preserving Host reads and raw-byte hashes. Host-backed operations also require #liveshareWorkspaceBridge.host.enabled#. Their effective access is off while Host access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.writeBytes": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 43,
-          "markdownDescription": "**Write bytes** — Allow byte-preserving Host writes with explicit overwrite rules. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Write bytes** — Allow byte-preserving Host writes with explicit overwrite rules. Host-backed operations also require #liveshareWorkspaceBridge.host.enabled#. Their effective access is off while Host access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.largeTransfers": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 44,
-          "markdownDescription": "**Upload large files** — Allow chunked Host file uploads. Write Bytes permission also applies. Large downloads are unavailable in v0.2 because sustained shared-terminal output did not pass live validation. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Upload large files** — Allow chunked Host file uploads. Write Bytes permission also applies. Large downloads are not available because they have not been validated. Host-backed operations also require #liveshareWorkspaceBridge.host.enabled#. Their effective access is off while Host access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.permissions.hostExec": {
           "type": "boolean",
           "default": true,
           "scope": "machine",
           "order": 45,
-          "markdownDescription": "**Run Host commands** — Allow arbitrary commands in a bounded Host child process. Requires all other operation permissions because raw commands cannot enforce per-operation restrictions. Host-backed operations also require #liveshareWorkspaceBridge.terminal.enabled#. Their effective access is off while terminal access is off; this configured preference is retained."
+          "markdownDescription": "**Run Host commands** — Allow arbitrary commands in a bounded Host child process. Requires all other operation permissions because raw commands cannot enforce per-operation restrictions. Host-backed operations also require #liveshareWorkspaceBridge.host.enabled#. Their effective access is off while Host access is off; this configured preference is retained."
         },
         "liveshareWorkspaceBridge.ipc.allowCodexSandboxClients": {
           "type": "boolean",
@@ -369,14 +408,10 @@
             "sharedTerminal",
             "portForward"
           ],
-          "enumDescriptions": [
-            "Every Host request is typed into the shared read/write PowerShell terminal (default). The Host shares that terminal once.",
-            "The shared terminal starts a foreground Host helper once; requests then use a Live Share forwarded loopback port. The Host shares the terminal once and runs \"Live Share: Share Server\" with the port the bridge shows."
-          ],
-          "default": "sharedTerminal",
+          "default": "portForward",
           "scope": "machine",
-          "order": 12,
-          "markdownDescription": "**Host Transport** — `sharedTerminal` sends each Host request through the shared terminal. `portForward` uses the terminal only to start a foreground helper (it stops on Ctrl+C, terminal close, session end or idle timeout) and then needs the Host to run \"Live Share: Share Server\" for the shown port. Takes effect at the next Host bind."
+          "order": 95,
+          "deprecationMessage": "Removed: the Host channel always uses portForward. This value is ignored."
         },
         "liveshareWorkspaceBridge.host.guestPort": {
           "type": "integer",

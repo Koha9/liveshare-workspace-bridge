@@ -12,7 +12,7 @@ function fixture(){
 }
 test('never selects an ordinary Guest terminal or writes a handshake when Host terminal access is disabled/missing',async t=>{
  const f=fixture();t.after(()=>f.host.dispose());f.settings['terminal.enabled']=false;
- await assert.rejects(f.host.bind(f.root),{code:'terminal_access_disabled'});assert.equal(f.writes.length,0);
+ await assert.rejects(f.host.bind(f.root),{code:'host_access_disabled'});assert.equal(f.writes.length,0);
  f.settings['terminal.enabled']=true;f.vscode.window.terminals=[{name:'pwsh',shellIntegration:{},creationOptions:{shellPath:'pwsh.exe'}}];
  await assert.rejects(f.host.bind(f.root),{code:'host_terminal_required'});assert.equal(f.writes.length,0);assert.equal(f.sent.length,0);
 });
