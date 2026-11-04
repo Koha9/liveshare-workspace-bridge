@@ -43,7 +43,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.cjs",
-    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs && node --check startup-diagnostics.cjs && node --check mcp-server.cjs && node --check mcp-launcher.cjs && node --check mcp-launcher-install.cjs && node --check mcp-tools.cjs && node --check mcp-definition-provider.cjs && node --check host-bootstrap.cjs && node --check host-terminal.cjs && node --check host-transport-tcp.cjs"
+    "check": "node --check extension.cjs && node --check workspace.cjs && node --check cli.cjs && node --check permissions.cjs && node --check host-channel.cjs && node --check host-operations.cjs && node --check patch.cjs && node --check ipc-access.cjs && node --check startup-diagnostics.cjs && node --check registry-cleanup.cjs && node --check mcp-server.cjs && node --check mcp-launcher.cjs && node --check mcp-launcher-install.cjs && node --check mcp-tools.cjs && node --check mcp-definition-provider.cjs && node --check host-bootstrap.cjs && node --check host-terminal.cjs && node --check host-transport-tcp.cjs"
   },
   "contributes": {
     "commands": [

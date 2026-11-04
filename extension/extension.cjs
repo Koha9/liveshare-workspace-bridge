@@ -12,6 +12,7 @@ const { MODES, ACCESS_KEYS, prepareAccess, listLocalUsers, configureAccess, noti
 const { createStartupJournal, captureStartupStderr } = require('./startup-diagnostics.cjs');
 const { installLauncher, launcherPath, renderMcpConfig } = require('./mcp-launcher-install.cjs');
 const { registerMcpDefinitionProvider } = require('./mcp-definition-provider.cjs');
+const { cleanupStaleRecords } = require('./registry-cleanup.cjs');
 const version = require('./package.json').version;
 const registry = path.join(os.homedir(), '.liveshare-local', 'instances');
 
@@ -23,6 +24,20 @@ function readyIpc(helperIpc, access) {
     result.deprecatedModeIgnored = true;
   }
   return result;
+}
+
+// Reload or a crash can skip dispose; remove records of exited windows once.
+// Failures are logged by code only and never block activation.
+function removeLeftoverRecords(log) {
+  let result;
+  try {
+    result = cleanupStaleRecords({ registryPath: registry });
+  } catch (error) {
+    log(`Discovery record cleanup skipped: ${error.code || 'cleanup_failed'}.`);
+    return;
+  }
+  if (result.removed.length) log(`Removed ${result.removed.length} discovery record(s) left by exited VS Code windows.`);
+  for (const issue of result.issues) log(`Discovery record cleanup issue: ${issue.code}.`);
 }
 
 function activate(context) {
@@ -177,6 +192,7 @@ function activate(context) {
     version,
     log: message => output.appendLine(message),
   }));
+  removeLeftoverRecords(message => output.appendLine(message));
   start(); // Also supports joining Live Share after this extension has activated.
   updateStatus();
 }

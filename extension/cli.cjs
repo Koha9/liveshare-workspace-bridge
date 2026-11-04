@@ -110,7 +110,27 @@ function records() {
   if (['denied','unavailable'].includes(inspected.registry.status)) throw Object.assign(new Error('Cannot read the bridge instance registry. Run diagnose for details.'), { code: 'discovery_access_failed', details: inspected });
   return inspected.records;
 }
+// 'exited' only when the OS reports no such process. EPERM means a process
+// exists under another account; anything else is not proof of exit.
+function ownerProcessState(pid, kill = process.kill) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return 'unknown';
+  try {
+    kill(pid, 0);
+    return 'alive';
+  } catch (error) {
+    if (error.code === 'ESRCH') return 'exited';
+    if (error.code === 'EPERM') return 'alive';
+    return 'unknown';
+  }
+}
+// A missing pipe whose owning VS Code process has exited is a leftover record,
+// not a failed window. It stays visible in probes for diagnosis.
+function ownerExitedProbe(entry, err, processState) {
+  if (err.transportCode !== 'ENOENT') return false;
+  return processState(entry.pid) === 'exited';
+}
 async function discover(options = {}) {
+  const processState = options.processState || ownerProcessState;
   const inspected = inspectRecords(options), found = [], probes = [], probe = options.probe || request;
   // Probe independent windows in bounded batches; a stale record must not add
   // its full timeout serially for every window. Preserve registry result order.
@@ -129,16 +149,19 @@ async function discover(options = {}) {
       probes.push({ id: entry.id, status: 'connected', rootCount: response.result.roots.length });
     } catch (err) {
       probes.push({ id: entry.id, status: ['EPERM','EACCES'].includes(err.transportCode || err.code) ? 'denied' : err.transportCode === 'ENOENT' ? 'stale' : 'unreachable', code: err.code || 'probe_failed', ...(err.transportCode ? { transportCode: err.transportCode } : {}), ...(err.requestSent !== undefined ? { requestSent: err.requestSent } : {}) });
+      if (ownerExitedProbe(entry, err, processState)) probes.at(-1).ownerProcess = 'exited';
     }
     }
   }
   const denied = inspected.registry.status === 'denied' || inspected.issues.some(x => ['EPERM','EACCES'].includes(x.code)) || probes.some(x => x.status === 'denied');
   const hasRoots = found.some(x => x.roots.length);
-  const failures = inspected.issues.length + probes.filter(x => x.status !== 'connected').length;
-  const status = hasRoots ? failures ? 'partial' : 'ready' : denied ? 'access_denied' : found.length ? 'no_shared_workspace' : inspected.records.length ? 'unavailable' : inspected.issues.length || inspected.registry.status === 'unavailable' ? 'invalid_registry' : 'no_records';
+  const staleRecordCount = probes.filter(x => x.ownerProcess === 'exited').length;
+  const liveRecordCount = inspected.records.length - staleRecordCount;
+  const failures = inspected.issues.length + probes.filter(x => x.status !== 'connected' && x.ownerProcess !== 'exited').length;
+  const status = hasRoots ? failures ? 'partial' : 'ready' : denied ? 'access_denied' : found.length ? 'no_shared_workspace' : liveRecordCount ? 'unavailable' : inspected.issues.length || inspected.registry.status === 'unavailable' ? 'invalid_registry' : 'no_records';
   const startupDiagnostics=options.fsImpl&&!options.startupDirectory?{status:'not_checked',records:[],issues:[]}:readStartupDiagnostics({directory:options.startupDirectory||path.join(path.dirname(inspected.registry.path),'startup-diagnostics'),fsImpl:options.startupFsImpl,now:options.now});
   startupDiagnostics.records=startupDiagnostics.records.map(record=>{const live=found.find(x=>x.pid===record.pid);return{...record,probeCorrelation:live?'ipc_connected':'not_verified',currentFailureConfirmed:false,events:record.events.map(e=>({...e,historical:!!live||record.current.health==='ready'||e.historical}))};});
-  return { readOnly: true, registry: inspected.registry, recordCount: inspected.records.length, status, instances: found, probes, issues: inspected.issues, startupDiagnostics };
+  return { readOnly: true, registry: inspected.registry, recordCount: inspected.records.length, staleRecordCount, status, instances: found, probes, issues: inspected.issues, startupDiagnostics };
 }
 function diagnosticReport(report) {
   return { ...report, instances: report.instances.map(({id,epoch,version,pid,roots,ipc}) => ({id,epoch,version,pid,roots,ipc})) };
@@ -289,4 +312,4 @@ async function main() {
   await sendRawRequest(options);
 }
 if (require.main === module) main().catch(err => { process.stdout.write(JSON.stringify({ ok: false, error: { code: err.code || 'client_error', message: err.message, ...(err.details !== undefined ? { details: err.details } : {}), ...(err.transportCode ? { transportCode: err.transportCode } : {}), ...(err.requestSent !== undefined ? { requestSent: err.requestSent } : {}) } }, null, 2) + '\n'); process.exitCode = 1; });
-module.exports = { request, instances, records, inspectRecords, discover, diagnosticReport, unsuccessful, uploadTransfer, projectStartupRecord, readStartupDiagnostics };
+module.exports = { request, instances, records, inspectRecords, discover, ownerProcessState, diagnosticReport, unsuccessful, uploadTransfer, projectStartupRecord, readStartupDiagnostics };
