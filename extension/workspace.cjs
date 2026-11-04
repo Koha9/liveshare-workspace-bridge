@@ -1,6 +1,20 @@
 'use strict';
 const { fail, integer, textHash, relativePath, normalizeEol, chooseEol, precheck, planChanges } = require('./core.cjs');
-const { createPermissions } = require('./permissions.cjs');
+const { createPermissions, NAMESPACE, RENAMED_SETTINGS } = require('./permissions.cjs');
+
+// Settings whose change invalidates the Host binding. The portForward tuning
+// keys (host.guestPort and the helper timeouts) are read when used instead,
+// so editing guestPort during a handshake must not drop it.
+const HOST_BINDING_SECTIONS = [
+  ...Object.keys(RENAMED_SETTINGS).map(key => `${NAMESPACE}.${key}`),
+  `${NAMESPACE}.terminal`,
+  `${NAMESPACE}.transfer`,
+  `${NAMESPACE}.agent.enabled`,
+];
+
+function affectsHostBinding(event) {
+  return HOST_BINDING_SECTIONS.some(section => event?.affectsConfiguration?.(section) === true);
+}
 const { createHostChannel } = require('./host-channel.cjs');
 const { createHostOperations, OPERATIONS: HOST_OPERATIONS } = require('./host-operations.cjs');
 const OPERATIONS = [...new Set(['info', 'list', 'read', 'readMany', 'create', 'write', 'edit', 'save', 'mkdir', 'stat', 'move', 'delete', 'diagnostics', 'symbols', 'definition', 'references', 'renameSymbol', 'format', 'workspaceSymbols', 'findFilesSnapshot', 'searchSnapshot', 'searchResults', 'providerRead', ...HOST_OPERATIONS])];
@@ -279,6 +293,6 @@ function createWorkspaceApi(vscode, identity, services = {}) {
     if (r.epoch !== undefined && r.epoch !== identity.epoch()) fail('workspace_changed', 'Workspace changed while this request was in flight; inspect any dispatched mutation.');
     return result;
   }
-  return { dispatch, roots: rootInfo, permissions, dispose: () => host.dispose(), workspaceChanged: () => { externallyChanged.clear(); host.changed(true); }, terminalClosed: terminal => host.terminalClosed?.(terminal), configurationChanged: event => host.changed(event?.affectsConfiguration?.('liveshareWorkspaceBridge.host') || event?.affectsConfiguration?.('liveshareWorkspaceBridge.terminal') || event?.affectsConfiguration?.('liveshareWorkspaceBridge.transfer') || event?.affectsConfiguration?.('liveshareWorkspaceBridge.agent.enabled')) };
+  return { dispatch, roots: rootInfo, permissions, dispose: () => host.dispose(), workspaceChanged: () => { externallyChanged.clear(); host.changed(true); }, terminalClosed: terminal => host.terminalClosed?.(terminal), configurationChanged: event => host.changed(affectsHostBinding(event)) };
 }
 module.exports = { createWorkspaceApi, OPERATIONS };

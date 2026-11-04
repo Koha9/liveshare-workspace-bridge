@@ -58,7 +58,7 @@ function fixture(initial = {}, settings = {}, services = {}) {
   };
   const api = createWorkspaceApi(vscode, { id: 'test-instance', epoch: () => 3, version: '0.2.0' }, services);
   const send = r => api.dispatch({ workspace: 'vsls:/', epoch: 3, ...r });
-  return { send, docs, disk, calls, saveBehavior, vscode, setApplyFalse: () => applyFalse = true };
+  return { api, send, docs, disk, calls, saveBehavior, vscode, setApplyFalse: () => applyFalse = true };
 }
 test('read returns current buffered content and version without provider reread or default hash', async () => {
   const f = fixture({ 'a.txt': 'one\n中文😀\n' });
@@ -152,4 +152,22 @@ test('language renaming checks every target, applies once, and saves only those 
  f.vscode.commands.executeCommand=async()=>({entries:()=>[[new f.vscode.Uri('vsls:/a'),[{range:new f.vscode.Range(0,6,0,13),newText:'newName'}]],[new f.vscode.Uri('vsls:/b'),[{range:new f.vscode.Range(0,4,0,11),newText:'newName'}]]]});
  const result=await f.send({op:'renameSymbol',path:'a',line:1,character:7,newName:'newName'});
  assert.equal(result.saved,true);assert.equal(f.calls.apply,1);assert.deepEqual(f.calls.save,['vsls:/a','vsls:/b']);assert.equal(f.docs.get('vsls:/user').isDirty,true);assert.equal(f.disk.get('vsls:/b'),'use(newName);');
+});
+
+test('renamed Host settings invalidate the binding; portForward tuning keys do not', () => {
+  const changes = [];
+  const host = { changed: invalidate => changes.push(invalidate), dispose() {} };
+  const f = fixture({}, {}, { host });
+  const event = key => ({ affectsConfiguration: section => key.startsWith(section) });
+  const invalidates = key => {
+    changes.length = 0;
+    f.api.configurationChanged(event('liveshareWorkspaceBridge.' + key));
+    return changes[0];
+  };
+  for (const key of ['host.enabled', 'host.terminalName', 'host.workspacePath', 'host.commandTimeoutMs', 'host.maxOutputCharacters', 'terminal.enabled', 'transfer.chunkBytes']) {
+    assert.equal(invalidates(key), true, key);
+  }
+  for (const key of ['host.guestPort', 'host.idleTimeoutMinutes', 'host.handshakeTimeoutMinutes']) {
+    assert.equal(invalidates(key), false, key);
+  }
 });
