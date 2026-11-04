@@ -1,4 +1,5 @@
 'use strict';
+const { removeTempDirectory } = require('./temp-cleanup.cjs');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const Module = require('node:module');
@@ -37,11 +38,11 @@ function fixture(t) {
     };
     extension = require('../extension.cjs');
   } finally { Module._load = original; }
-  t.after(() => {
+  t.after(async () => {
     for (const item of context.subscriptions.slice().reverse()) item.dispose();
     assert.equal(path.dirname(home), os.tmpdir());
     assert.ok(path.basename(home).startsWith('lswb-recovery-'));
-    fs.rmSync(home, { recursive: true, force: true });
+    await removeTempDirectory(home, { prefix: 'lswb-recovery-' });
   });
   extension.activate(context);
   return {
