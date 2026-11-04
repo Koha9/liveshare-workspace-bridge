@@ -2,7 +2,7 @@
 
 [English](DEVELOPMENT.md) | [简体中文](DEVELOPMENT.zh-CN.md) | [繁體中文](DEVELOPMENT.zh-TW.md) | **日本語**
 
-Windows、Node.js、確認済み Python 3 を使用します。実行は組込モジュール、Windows PowerShell、同梱 C#、パッケージは Python 標準ライブラリで、依存インストール不要です。
+Windows、Node.js、確認済みの Python 3 が必要です。実行時は組み込みモジュール、Windows PowerShell、同梱の C# ソースを使い、npm 依存はありません。パッケージ作成は Python 標準ライブラリだけを使います。テストは `extension/package.json` で宣言された devDependencies（MCP SDK 相互運用テスト）を使います。`npm test` の前に `extension/` 内で `npm ci` を一度実行してください。
 
 ```text
 extension/                         Runtime, CLI and tests
@@ -12,7 +12,7 @@ dist/                              Ignored generated packages
 .local/                            Ignored local working files
 ```
 
-extension/cli.cjs が正規クライアントでビルドが skill へ同期します。版、API、翻訳を一致させ、skill 指示／参照は英語のみ管理します。
+MCP サーバー（extension/mcp-server.cjs と mcp-tools.cjs）が唯一の agent インターフェースです。extension/cli.cjs はトラブルシューティング CLI であり、MCP サーバーが使うローカルトランスポートライブラリです。mcp-tools.cjs が依存するエクスポートは維持してください。バージョン、API フィールド、翻訳を一致させます。
 
 ```powershell
 npm test
@@ -23,13 +23,13 @@ $pythonExe = '<path-to-python.exe>'
 & $pythonExe .\scripts\build.py --verify
 ```
 
-リポジトリ直下の入口は Windows で `./build.ps1` または `build.bat`、Unix／Git Bash で `sh ./build.sh` です。引数なしで `dist/` の VSIX、skill ZIP、SHA-256 を作成・検証し、`--check`、`--verify`、`--help` は `scripts/build.py` へ渡します。`LSWB_PYTHON` に Python 3 実行ファイルの絶対パスを指定できます。Windows は有効な Conda、ユーザーの Anaconda、Python Launcher、Unix は有効な Conda または Python 3 を選びます。別のカレントディレクトリからも呼び出せます。
+リポジトリ直下のパッケージ作成用の入口は、Windows では `./build.ps1` または `build.bat`、Unix／Git Bash では `sh ./build.sh` です。引数なしの場合は `dist/` に VSIX とその SHA-256 ファイルを作成して検証します。`--check`、`--verify`、`--help` は `scripts/build.py` に渡されます。必要に応じて `LSWB_PYTHON` に Python 3 実行ファイルの完全なパスを設定します。Windows は有効な Conda、ユーザーの Anaconda、Python Launcher を検出し、Unix は有効な Conda または Python 3 を使います。これらの入口は別のカレントディレクトリからも動作します。
 
-通常テストは文書／保存／権限／IPC 契約を検査し、接続プロジェクトを変更しません。ローカル成功は全 Host、アカウント、ポリシー、遠隔、言語サービスの保証ではありません。
+通常テストは文書／保存／権限／IPC の契約を、接続中のプロジェクトを変更せずに検査します。ローカルのテストが通っても、すべての Host、アカウント、ポリシー、リモートセッション、言語プロバイダーで動作する証拠にはなりません。
 
-VSIX、skill ZIP、SHA-256 を生成します。--check は構成／版／同期、--verify は正確なソースメンバーを照合します。文書 whitelist は過去の受け入れ、issues、.local、私有 memo を除外します。
+ビルドは VSIX とその SHA-256 ファイルを作成します。--check は構成とバージョンを検証し、--verify は現在のパッケージを正確なソースメンバーと照合します。明示的な文書 whitelist は、過去の受け入れ文書、issues、.local、私的なメモを除外します。
 
-実テストは明示範囲、所有一意領域、後片付けが必要です。live-v01.cjs は LIVESHARE_RUN_LIVE=1 と検索ビュー変更を伴います。live-sandbox.cjs は既存アカウントだけで一時領域 ACL 初期化を行い得ますが Host コマンドなしです。通常 CI に含めません。
+実環境テストには明示的な範囲、所有する一意のフィクスチャー、後片付けが必要です。extension/test/live-v01.cjs は LIVESHARE_RUN_LIVE=1 が必要で、検索ビューを変更します。live-sandbox.cjs は既存のローカルアカウントを使い、所有する一時ワークスペースで ACL を初期化することがありますが、Host コマンドは送信しません。サンドボックス化されたクライアントとして Codex の実行ファイル（`LIVESHARE_CODEX_EXE`）を使います。これらのスクリプトは通常の CI テストではありません。
 
 ```powershell
 $env:LIVESHARE_RUN_SANDBOX = '1'
@@ -37,12 +37,12 @@ $env:LIVESHARE_CODEX_EXE = '<absolute-path-to-codex.exe>'
 node .\extension\test\live-sandbox.cjs
 ```
 
-Host テストは対象 RW 端末／root／epoch を固定し、設定復元で同時ユーザー変更を上書きしません。端末無効は Host を拒否し Guest へ代替しません。stage/commit/push を暗黙実行しません。
+Host テストでは対象の RW 共有 PowerShell を使い、root/epoch を固定し、同時に行われたユーザーの編集を上書きせずに一時的に変更した設定を復元します。Host アクセス（`host.enabled`）が無効なら Host 作業を拒否し、Guest へ代替してはいけません。stage/commit/push を暗黙に行いません。
 
-四言語のリンク／コマンド／上限を一致させ、変更後に参照とパッケージを検査します。機械固有記録、資格情報、Host 生パス、調査経過を公開文書／包へ入れません。生成／ローカルファイルは対象外で、Windows CI は公開しません。
+読者向け文書は四つのロケール版があり、リンク／コマンド／上限を一致させます。編集後は参照とパッケージを確認します。機械固有の記録、資格情報、Host の生パス、調査の経緯は公開文書や成果物に含めません。生成ファイル／ローカルファイルは無視され、Windows CI は公開せずに確認とビルドを行います。
 
 ## Marketplace 公開
 
-`publish-marketplace.yml` は GitHub Actions OIDC と `@vscode/vsce` 4.1.0 で安定版を公開し、PAT secret は不要です。Marketplace 発行者 `Koha9-Lee` の Trusted Publishing ポリシーで owner `Koha9`、repository `liveshare-workspace-bridge`、workflow `publish-marketplace.yml` を指定し、Environment は空欄にします。[公式設定手順](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#publish-with-github-actions-and-trusted-publishing)を参照してください。
+`publish-marketplace.yml` は GitHub Actions OIDC と `@vscode/vsce` 4.1.0 で安定版を公開し、PAT secret は不要です。Marketplace 発行者 `Koha9-Lee` で、owner `Koha9`、repository `liveshare-workspace-bridge`、workflow `publish-marketplace.yml`、Environment 空欄の Trusted Publishing ポリシーを作成します。[公式設定手順](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#publish-with-github-actions-and-trusted-publishing)を参照してください。
 
-安定版 GitHub Release の公開で起動します。既存版を公開する場合は Actions の **Publish Marketplace** で `main` と既存タグ（例 `v0.2.4`）を選びます。そのタグをチェックアウトし、版、テスト、パッケージを検査して VSIX を構築・検証後に公開します。このジョブだけが `id-token: write` を持ち、トークン交換失敗時に PAT へ切り替えません。公開失敗時は実行結果と Marketplace の公開版を確認してから再試行を判断し、既存版のタグを移動して内容を置き換えません。
+安定版の GitHub Release を公開するとワークフローが起動します。作成済みのリリースを公開するには、Actions タブから `main` で **Publish Marketplace** を実行し、既存のタグ（例 `v0.3.0`）を入力します。そのタグをチェックアウトし、パッケージのバージョンを確認し、テストとパッケージ検査を実行してから、VSIX をビルド・検証して公開します。`id-token: write` を持つのはこのジョブだけです。トークン交換に失敗しても PAT 認証に切り替えません。失敗した公開を再試行する前に、実行結果と Marketplace の公開バージョンを確認してください。既存バージョンのタグを変更して内容を置き換えてはいけません。

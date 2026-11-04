@@ -4,30 +4,25 @@
 
 [ドキュメント](README.ja.md)
 
-## モジュールの役割
+- extension.cjs はローカル IPC（既定で所有者のみ）、ライフサイクル、英語の権限ステータスを担当します。
+- registry-cleanup.cjs は有効化時に実行され、終了したウィンドウが残した検出記録（ファイル名、id、pid、パイプ名が一致するもの）を削除します。リンクやその他のファイルには触れません。cli.cjs の検出はそのような記録を `stale` プローブとして報告します。
+- permissions.cjs はリクエスト認可層で、ディスパッチ前と Host 送信前に現在の User/machine 設定を読み取ります。agent のエンドポイントは権限を変更できません。
+- workspace.cjs は文書バージョン、dirty バッファーの確認、テキスト事前検証、言語編集、対象保存を担当します。Host の変更後は、正規化内容が一致するまで影響するモデルの保護を維持します。
+- host-channel.cjs は Host リクエストを直列化し、共有端末を通じて Host ヘルパーを一度起動し（ランダムな bootstrap ファイルで検証）、転送ポートをバックグラウンドで待ち、各リクエストをヘルパーごとの token と nonce を付けてループバック TCP（host-transport-tcp.cjs）で送信します。host-terminal.cjs は共有 RW 端末を選び、host-bootstrap.cjs はヘルパーを生成してその待ち受けバナーを読み取ります。リクエストを端末に入力することはありません。
+- host-operations.cjs は公開 API を個別の Host アクションに変換し、ジョブ／転送を root と epoch に結び付けます。
+- host-server.ps1 はフォアグラウンドのメモリ上 Host ヘルパーで、host-core.ps1（Host アクション）を埋め込みます。host-runtime.cs は所有する Windows Job Object、上限付きストリーム排出、分割バイトハンドル、SHA-256、期限を提供します。常駐 Host agent はインストールしません。ヘルパーはループバックだけで待ち受け、Ctrl+C、端末を閉じること、セッション終了、アイドルタイムアウトで終了します。
+- mcp-server.cjs は stdio MCP プロトコル層（initialize、tools/list、tools/call）です。stdout にはプロトコルフレームだけを書き込みます。
+- mcp-tools.cjs は MCP ツール表を定義します。cli.cjs のトランスポートを通じて Guest、Host、ローカルファイルのツールをブリッジ操作に対応付け、ルート uri から instance/epoch へのバインドを保持します。結果不明のトランスポート結果は報告し、再送しません。
+- mcp-launcher.cjs は自己完結型のランチャーで、拡張が `~/.liveshare-local/mcp-server.cjs` にインストールします（mcp-launcher-install.cjs 経由。これは Copy MCP Server Configuration のスニペットも生成します）。稼働中の検出記録から mcp-server.cjs を起動するため（最新のサーバーファイルを優先し、次に最新の記録）、agent の構成は更新後も維持されます。
+- mcp-definition-provider.cjs は mcp-server.cjs を VS Code に登録し（`vscode.lm.registerMcpServerDefinitionProvider`）、組み込み agent が検出できるようにします。
+- cli.cjs は人が使うトラブルシューティング CLI（instances、diagnose、固定した raw JSON リクエスト）であり、mcp-tools.cjs が検出、リクエスト、分割アップロードに使うローカルトランスポートライブラリです。agent が直接呼び出すことはありません。
 
-- `extension.cjs`：既定で現在ユーザー専用のローカル IPC、ライフサイクル、英語の権限ステータス。
-- `permissions.cjs`：認可層。リクエスト処理前と Host 送信前に現在の User/machine 設定を確認します。agent API は権限を変更できません。
-- `workspace.cjs`：文書バージョン、dirty 保護、テキスト事前検証、言語編集、対象保存。Host 変更後は正規化内容が一致するまでモデル保護を維持します。
-- `host-channel.cjs`：共有端末操作を直列化し、ランダム bootstrap でルートを確認し、nonce と終了マーカーで応答を区切ります。大入力は準備確認後に非エコーのコンソール経路で送信します。
-- `host-operations.cjs`：公開 API を個別 Host アクションへ変換し、ジョブ／転送を root と epoch に結び付けます。
-- `host-actions.ps1`：メモリ上の Host ヘルパーを読み込みます。`host-runtime.cs` は Windows Job Object、上限付きストリーム排出、分割バイトハンドル、SHA-256、期限を提供します。常駐 Host agent や HTTP サービスは不要です。
-- `cli.cjs`：唯一の正規クライアント。ビルド時 skill に複製し、JSON、パッチ、分割アップロードを扱います。残されている download 入口は本版のサーバー認可で拒否します。
+テキスト編集の既定は引き続き文書経路で、保存のたびにプロバイダーを再読み取りしません。任意の Host 経路は保存済みファイルの完全検索、コマンド、パッチ、バイト／ディレクトリ操作を担当します。raw Host 実行には全操作権限が必要で、個別アクションは引き続き個別に制御できます。これらの確認は任意スクリプトに対する OS サンドボックスではありません。
 
-## 文書経路と Host 経路
+送信済み作業は権限の取り消しでロールバックされません。子タスクは上限付きのタイムアウトを保持します。同期ファイルシステム操作は Guest 応答のタイムアウト後も完了する場合があります。結果不明のものは再試行しません。転送にはアイドル期限と所有する一時ステージングがあり、ディレクトリコピーは途中で失敗することがあります。再帰削除や複数ファイルのディスクトランザクションは提供しません。
 
-通常のテキスト編集は文書 API を使い、保存成功後のプロバイダー再読み取りを加えません。任意の Host 経路は保存済み検索、コマンド、パッチ、バイト／ディレクトリ操作を担当します。raw 実行には全操作権限、個別 API には個別権限が必要です。これは任意スクリプトの OS サンドボックスではありません。
+`pipe-security.cs` / `pipe-host.ps1`：明示的な owner／sandbox DACL、ローカル／セッションの照合、持続する単一インスタンスのパイプ、上限付き UTF-8 入力と応答の排出。
 
-`vsls:` URI は保持し、Node のローカルファイルシステムへ渡しません。instance/epoch/root で結び付け、ワークスペース変更後に旧リソースを別プロジェクトへ流用しません。結果不明の送信済み変更を自動再送しません。
+`local-accounts.cs` はローカル SAM ユーザーだけを列挙して安定した SID を選び、`ipc-access.cjs` は User 限定のモード解決、旧 SID の一度限りの移行、英語のアカウント選択画面を担当します。
 
-## 権限撤回、障害、制約
-
-権限撤回は新規作業を止め、送信済み処理はロールバックしません。子タスクのタイムアウトは有効です。同期ファイル操作は Guest 応答タイムアウト後も完了する場合があります。転送の一時資源にはアイドル期限があり、ディレクトリコピーは途中失敗があり得ます。再帰削除と複数ファイルの保存トランザクションは提供しません。
-
-Host 書き込みが Guest 更新に先行する場合、影響する開いた文書だけを確認します。不一致や dirty 競合は保持して報告し、全体 revert はしません。継続する競合や未対応の手順は skill がユーザーへ協力を依頼し、返答後に依存作業を続行します。
-
-`pipe-security.cs` / `pipe-host.ps1`: 明示 owner／sandbox DACL、ローカル／セッション照合、単一ハンドル維持、入力上限、応答排出。
-
-`local-accounts.cs` はローカル SAM と安定 SID の選択、`ipc-access.cjs` は User モード、旧 SID の一度限り移行、英語の選択画面を担当します。
-
-大容量ダウンロード（`transferOpenRead/transferRead`、CLI download を含む）は `feature_unavailable` です。アクセス可能なコピーとローカルパスを依頼し、小分け読み取り反復や raw コマンドで迂回しません。小容量読み取りと大容量アップロードは利用できます。
+大容量ダウンロード（`transferOpenRead`/`transferRead`）は `feature_unavailable` を返します。アクセス可能なコピーとローカルパスをユーザーに依頼し、小分けのバイト読み取りの反復や raw コマンドで制限を迂回しません。小容量のバイト読み取りと大容量アップロードは利用できます。
