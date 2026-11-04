@@ -81,8 +81,8 @@ The table lists the 36 tools in v0.2.4. Each tool's MCP description holds the fu
 | `lswb_references` | Find reference locations of the symbol at a position. | no | no |
 | `lswb_rename_symbol` | Rename a symbol through the language service, then save each changed document. | yes | no |
 | `lswb_format` | Format a document with its language formatter, then save it. | yes | no |
-| `lswb_host_status` | Report whether the Host channel is available and bound, plus eligible shared terminals. | no | status only |
-| `lswb_host_bind` | Bind the Host channel to the shared Host terminal, verified by a random handshake file. | no (temporary handshake file only) | yes |
+| `lswb_host_status` | Report whether the Host channel is available and bound, plus eligible shared terminals and the portForward handshake state. | no | status only |
+| `lswb_host_bind` | Bind the Host channel to the shared Host terminal, verified by a random handshake file. In portForward mode it returns `waitingForward` once the helper listens; see [Binding in portForward mode](#binding-in-portforward-mode). | no (temporary handshake file only) | yes |
 | `lswb_search` | Search the text of saved files on the Host, with include/exclude globs. | no | yes |
 | `lswb_find_files` | Find saved Host file paths matching glob patterns. | no | yes |
 | `lswb_host_stat` | Return Host disk metadata for a path, optionally the raw-byte SHA-256 and editor text states. | no | yes |
@@ -116,6 +116,23 @@ Tools in the Host channel column run on the Live Share Host. They require all of
 - a bound channel: check with `lswb_host_status` and bind with `lswb_host_bind`.
 
 Search and patches also need ripgrep and Git on the Host. By default, every request is typed into the shared terminal. The optional `host.transport: portForward` setting instead starts a foreground Host helper once and sends requests over a Live Share forwarded port. See [Settings](SETTINGS.md).
+
+#### Binding in portForward mode
+
+In portForward mode, binding takes two steps, because the Host user has to share the helper port by hand:
+
+1. Call `lswb_host_bind`. Once the Host helper is listening, it returns `bound: false` with `handshake.state: "waitingForward"`, the `hostPort` to share, and a `next` hint. It does not wait for the Host.
+2. Ask the Host to run **Live Share: Share Server** and enter that port. Then call `lswb_host_status` until it reports `bound: true`. `lswb_host_status` answers immediately, even while the handshake is still running.
+
+While the handshake runs:
+
+- Calling `lswb_host_bind` again only reports the same handshake. It does not start a second helper.
+- Other Host tools return `host_handshake_pending` with `hostPort` and send nothing. Do not retry them to wait for the handshake; poll `lswb_host_status` instead.
+- The handshake waits for up to `host.handshakeTimeoutMinutes`. Cancel in the notification, a workspace change or closing the window also stops it.
+
+If the handshake fails or is cancelled, `lswb_host_status` shows `handshake.state` `failed` or `cancelled`, with `handshake.code` and `handshake.message`. Before binding again, ask the Host to press Ctrl+C in the shared terminal if the previous helper is still running. The next `lswb_host_bind` starts a new helper.
+
+The Guest IPC helper forwards one request at a time. That is why `lswb_host_bind` returns before the Host acts instead of holding the connection for minutes.
 
 ## MCP, the CLI and the skill
 
