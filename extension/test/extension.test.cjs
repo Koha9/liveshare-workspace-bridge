@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { inspectRecords, request } = require('../cli.cjs');
 const manifest = require('../package.json');
+const { removeTempDirectory, recordingChildProcess } = require('./temp-cleanup.cjs');
 test('extension starts before joining, refreshes workspace epoch, restarts and removes registration on disposal', { skip: process.platform !== 'win32', timeout: 90000 }, async t => {
   const localHome=fs.mkdtempSync(path.join(os.tmpdir(),'lswb-lifecycle-home-'));
   const records=()=>inspectRecords({registryPath:path.join(localHome,'.liveshare-local','instances')}).records;
@@ -29,9 +30,17 @@ test('extension starts before joining, refreshes workspace epoch, restarts and r
   };
   const loader = Module._load;
   let extension;
-  try { Module._load = function(name, parent, isMain) { if(name==='node:os')return {...os,homedir:()=>localHome};return name === 'vscode' ? vscode : loader.call(this, name, parent, isMain); }; extension = require('../extension.cjs'); }
+  // Record the real IPC helpers so cleanup can wait for them to exit.
+  const helpers = [];
+  const recordedChildProcess = recordingChildProcess(helpers);
+  try { Module._load = function(name, parent, isMain) { if(name==='node:os')return {...os,homedir:()=>localHome};if(name==='node:child_process')return recordedChildProcess;return name === 'vscode' ? vscode : loader.call(this, name, parent, isMain); }; extension = require('../extension.cjs'); }
   finally { Module._load = loader; }
-  t.after(() => { for (const disposable of context.subscriptions.slice().reverse()) disposable.dispose();assert.equal(path.dirname(localHome),os.tmpdir());assert.ok(path.basename(localHome).startsWith('lswb-lifecycle-home-'));fs.rmSync(localHome,{recursive:true,force:true}); });
+  t.after(async () => {
+    for (const disposable of context.subscriptions.slice().reverse()) disposable.dispose();
+    assert.equal(path.dirname(localHome), os.tmpdir());
+    assert.ok(path.basename(localHome).startsWith('lswb-lifecycle-home-'));
+    await removeTempDirectory(localHome, { prefix: 'lswb-lifecycle-home-', children: helpers });
+  });
   // A record left by a window whose process exited is removed at activation.
   const leftoverDirectory = path.join(localHome, '.liveshare-local', 'instances');
   const leftoverPid = await new Promise((resolve, reject) => {

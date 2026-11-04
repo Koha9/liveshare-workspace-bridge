@@ -1,4 +1,5 @@
 'use strict';
+const { removeTempDirectory } = require('./temp-cleanup.cjs');
 // Dispatch-layer scheduling in extension.cjs, with a fake IPC helper process.
 // The real pipe-host.ps1 forwards one request at a time; several in-flight
 // frames occur only when an older request outlives a replaced helper. This
@@ -118,12 +119,12 @@ test('a pending hostBind does not block hostStatus or info; other ops stay queue
   });
   const child = fakeChild();
   const context = { subscriptions: [] };
-  t.after(() => {
+  t.after(async () => {
     for (const disposable of context.subscriptions.slice().reverse()) {
       disposable.dispose();
     }
     Object.defineProperty(process, 'platform', platform);
-    fs.rmSync(home, { recursive: true, force: true });
+    await removeTempDirectory(home, { prefix: 'lswb-dispatch-home-' });
   });
   const extension = loadExtension({
     vscode: fakeVscode(),
