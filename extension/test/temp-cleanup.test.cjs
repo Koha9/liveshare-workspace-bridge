@@ -39,3 +39,11 @@ test('recording child_process keeps real exports and records spawned children', 
   assert.deepEqual(children, [child]);
   assert.equal(await waitForExit(child, 5000), true);
 });
+
+test('retries while an unrecorded process briefly keeps the directory busy', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lswb-cleanup-'));
+  const holder = childProcess.spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1000)'], { cwd: directory, windowsHide: true });
+  await new Promise(resolve => holder.once('spawn', resolve));
+  await removeTempDirectory(directory, { prefix: 'lswb-cleanup-' });
+  assert.equal(fs.existsSync(directory), false);
+});

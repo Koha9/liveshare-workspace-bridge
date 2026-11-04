@@ -1,7 +1,7 @@
 'use strict';
 // Test-only removal of temporary directories. On Windows a child process that
 // was just killed, or a scanner opening a new file, can keep a handle for a
-// moment, so rmSync fails with EPERM/EBUSY after the assertions passed.
+// moment, so removal fails with EPERM/EBUSY after the assertions passed.
 const assert = require('node:assert/strict');
 const childProcess = require('node:child_process');
 const fs = require('node:fs');
@@ -57,7 +57,9 @@ async function removeTempDirectory(directory, options) {
   assert.ok(path.basename(directory).startsWith(options.prefix));
   const timeoutMs = options.timeoutMs || EXIT_TIMEOUT_MS;
   for (const child of options.children || []) await settleChild(child, timeoutMs);
-  fs.rmSync(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  // fs.rmSync on Node 24 fails at once on EPERM despite maxRetries;
+  // the promise version retries with linear backoff as documented.
+  await fs.promises.rm(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
 }
 
 module.exports = { removeTempDirectory, recordingChildProcess, waitForExit };
