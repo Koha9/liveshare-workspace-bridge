@@ -13,14 +13,16 @@ All settings are English, under `liveshareWorkspaceBridge.*`, with machine scope
 | Setting | Meaning |
 |---|---|
 | agent.enabled | Master access switch; default true. Info/status remain inspectable. |
-| terminal.enabled | Shared Host terminal access; default false. All Host-backed capabilities are effectively disabled while off. |
+| host.enabled | Host access; default false. All Host-backed capabilities are effectively disabled while off (`host_access_disabled`). Replaces terminal.enabled. |
 | permissions.OPERATION | Individual switches; aliases inherit their base operation. Inspect info.permissions.configured/effective. |
-| terminal.name | Exact shared RW terminal name, or one uniquely eligible shared terminal. Guest terminals are excluded. |
-| terminal.hostWorkspacePath | Optional explicit Host root; otherwise verify the shared PowerShell current directory. |
-| terminal.commandTimeoutMs | 120000 by default, range 1000..3600000. |
-| terminal.maxOutputCharacters | Retained characters per stdout/stderr stream, default 65536, range 1024..262144. |
+| host.terminalName | Exact name of the shared RW terminal that starts the Host helper, or one uniquely eligible shared terminal. Guest terminals are excluded. |
+| host.workspacePath | Optional explicit Host root; otherwise verify the shared PowerShell current directory. |
+| host.commandTimeoutMs | 120000 by default, range 1000..3600000. |
+| host.maxOutputCharacters | Retained characters per stdout/stderr stream, default 65536, range 1024..262144. |
 | transfer.chunkBytes | Raw bytes/chunk, default 32768, range 1024..65536. |
 | transfer.idleTimeoutMs | Handle/staging idle lifetime, default 120000, range 10000..900000. |
+
+The 0.3.0 rename keeps reading the old `terminal.*` User values for one version while the new key is not set; see [Settings](SETTINGS.md#deprecated-keys-read-for-one-version). info.permissions reports `hostEnabled`.
 
 Raw Host commands require every operation permission to be enabled: arbitrary code cannot enforce individual operation restrictions. Document mutations require save permission; parent creation requires mkdir; byte overwrite requires write. These controls authorize operations, not an OS filesystem sandbox.
 
@@ -29,7 +31,7 @@ Raw Host commands require every operation permission to be enabled: arbitrary co
 {"op":"hostBind"}
 ```
 
-Status sends no command. Binding verifies an owned temporary Guest bootstrap file, loads a session helper into Host PowerShell and removes the file. It does not install a Host agent or change authentication. Current Host support is Windows PowerShell on Windows. Revoking terminal access stops new requests, not already-dispatched effects.
+Status sends no command and answers immediately. Binding writes an owned temporary Guest bootstrap file, types one launch line into the shared Host terminal to start a foreground in-memory Host helper (protocol 3), and removes the file once the helper listens. hostBind then returns `bound:false` with `handshake.state:"waitingForward"`, `hostPort` and `next`; after the Host runs "Live Share: Share Server" for that port, hostStatus reports `bound:true`. Until then other Host requests return `host_handshake_pending`. Every request travels over the forwarded loopback port with a per-helper token; nothing else is typed into the terminal. It does not install a Host agent or change authentication. Current Host support is Windows PowerShell on Windows. Revoking Host access stops new requests, not already-dispatched effects.
 
 ## Text, files and language
 

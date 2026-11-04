@@ -8,7 +8,7 @@
 
 Install the extension in the Live Share Guest window's Profile. After an update reload that window, reconnect to the intended session, and run CLI instances. Choose the project by root name and complete vsls URI, then retain instance/epoch/workspace. A binding error after reload requires rediscovery. The extension Output channel reports pipe startup errors.
 
-Open **Live Share Workspace Bridge: Configure Agent Permissions**. Agent access defaults on; shared terminal access defaults off. Inspect configured and effective permissions. The user controls these settings; agents must not enable them to bypass a denial. Permission changes block new work, without undoing dispatched effects.
+Open **Live Share Workspace Bridge: Configure Agent Permissions**. Agent access defaults on; Host access (`host.enabled`) defaults off. Inspect configured and effective permissions. The user controls these settings; agents must not enable them to bypass a denial. Permission changes block new work, without undoing dispatched effects.
 
 ## Runtime disconnects and recovery
 
@@ -20,9 +20,9 @@ If still disconnected, run diagnose once. For task-authorized recovery the agent
 
 ## Missing or unresponsive Host terminal
 
-Host features require one connected shared Windows PowerShell terminal with read/write access. Ordinary Guest terminals are excluded. If absent, the agent asks the user once for Host setup and waits. Multiple candidates need the exact configured name. No repeated prompts, guessed terminals, or alternate execution routes.
+Host features require one connected shared Windows PowerShell terminal with read/write access; it starts the Host helper once, and the Host then shares the helper port with "Live Share: Share Server". Ordinary Guest terminals are excluded. If absent, the agent asks the user once for Host setup and waits. Multiple candidates need the exact configured name. No repeated prompts, guessed terminals, or alternate execution routes.
 
-Binding verifies the shared root using an owned temporary bootstrap file. A sent request that times out quarantines the channel; do not replay mutations. Preserve the receipt, inspect affected targets, and wait until the user confirms the terminal is idle or restarted before explicit acknowledgeRecovery binding. Timeout details contain counters, not captured file contents.
+Binding verifies the shared root using an owned temporary bootstrap file. While `lswb_host_status` shows `handshake.state: "waitingForward"`, ask the Host to share the shown port and poll status; other Host tools return `host_handshake_pending`. If the handshake failed or was cancelled, ask the Host to press Ctrl+C on any previous helper before binding again. A sent mutation whose outcome is unknown quarantines the channel; do not replay mutations. Preserve the receipt, inspect affected targets, and wait until the user confirms the Host is idle or the helper restarted before explicit acknowledgeRecovery binding. Timeout details contain counters, not captured file contents.
 
 ## Editing and Host changes
 

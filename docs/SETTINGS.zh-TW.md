@@ -9,15 +9,15 @@
 | 設定（省略前綴） | 型別／預設／範圍 | 用途與安全 | 生效 |
 |---|---|---|---|
 | `agent.enabled` | `boolean` / `true` | 工作區操作總開關。info／hostStatus 與安全診斷資料仍可檢查；關閉不撤銷已派發效果。 | 後續即時生效，並使 Host 繫結／資源參照失效。 |
-| `terminal.enabled` | `boolean` / `false` | 允許 Host API，仍須單項權限及驗證共用 RW 終端。繫結可建立／刪除自有 bootstrap 暫存檔，不把一般 Guest shell 當 Host。 | 後續即時生效，並使 Host 繫結／資源參照失效。 |
+| `host.enabled` | `boolean` / `false` | 允許 Host API，仍須單項權限及驗證共用 RW 終端。繫結可建立／刪除自有 bootstrap 暫存檔，不把一般 Guest shell 當 Host。 | 後續即時生效，並使 Host 繫結／資源參照失效。 |
 | `powershell` | `string` / `""` | Guest 本機 IPC／帳戶輔助程式 PowerShell 路徑；空值用系統 Windows PowerShell。不選 Host shell、不改執行策略。 | 下次本機橋接啟動使用，不自動切換目前程式。 |
 | `ipc.accessMode` | `string` / `"ownerOnly"` | ownerOnly／selectedUsers（0.3.0 移除的 allLocalUsers 按 ownerOnly 執行，不改寫設定）。擁有者始終保留，額外只限目前本機 SAM／同 Windows session ID，不是 Everyone、群組或全部網域使用者，網域控制站拒絕列舉。信任帳戶全部處理程序，超出 Codex 檔案系統沙箱但仍受橋接權限限制。 | 重啟 IPC、改變執行個體／epoch，需重新探索。 |
 | `ipc.selectedUserSids` | `array` / `[]` | selectedUsers 專用穩定 SID，其他模式不依此授權。唯一清單最多 256 字串；UI 格式檢查，執行時每項最多 184 字元且驗證本機 SAM。名稱只顯示，改名保留，刪除重建不替代。 | 重啟 IPC、改變執行個體／epoch，需重新探索。 |
 | `ipc.allowCodexSandboxClients` | `boolean` / `false` | 已淘汰相容項。未明確 User 模式時，true 固定原兩個沙箱 SID 到 selectedUsers，false／未設定為 ownerOnly；明確模式優先。不自動開 Host。首次寫 User 設定，布林不能恢復快照前刪除重建的 SID。 | 重啟 IPC、改變執行個體／epoch，需重新探索。 |
-| `terminal.name` | `string` / `""` | 目標共用終端精確名稱；空值需唯一合格共用 PTY，仍檢查唯讀並驗證繫結。標題非實際 shell／版本證明。 | Host 繫結失效，後續允許的呼叫重綁。 |
-| `terminal.hostWorkspacePath` | `string` / `""` | 可選 Host 根目錄；空值驗證共用 PowerShell 目前目錄與 Guest 根。非 Guest 本機路徑，hostBind 參數可覆蓋。 | Host 繫結失效，後續允許的呼叫重綁。 |
-| `terminal.commandTimeoutMs` | `integer` / `120000` / 1000..3600000 | Host 子命令預設毫秒期限；hostExec timeoutMs 可合法覆蓋。既有工作期限不變，非所有 IPC／握手逾時。 | Host 繫結失效，後續允許的呼叫重綁。 |
-| `terminal.maxOutputCharacters` | `integer` / `65536` / 1024..262144 | stdout／stderr 分別保留字元上限；超出排空並標截斷，不是完整輸出。 | Host 繫結失效，後續允許的呼叫重綁。 |
+| `host.terminalName` | `string` / `""` | 目標共用終端精確名稱；空值需唯一合格共用 PTY，仍檢查唯讀並驗證繫結。標題非實際 shell／版本證明。 | Host 繫結失效，後續允許的呼叫重綁。 |
+| `host.workspacePath` | `string` / `""` | 可選 Host 根目錄；空值驗證共用 PowerShell 目前目錄與 Guest 根。非 Guest 本機路徑，hostBind 參數可覆蓋。 | Host 繫結失效，後續允許的呼叫重綁。 |
+| `host.commandTimeoutMs` | `integer` / `120000` / 1000..3600000 | Host 子命令預設毫秒期限；hostExec timeoutMs 可合法覆蓋。既有工作期限不變，非所有 IPC／握手逾時。 | Host 繫結失效，後續允許的呼叫重綁。 |
+| `host.maxOutputCharacters` | `integer` / `65536` / 1024..262144 | stdout／stderr 分別保留字元上限；超出排空並標截斷，不是完整輸出。 | Host 繫結失效，後續允許的呼叫重綁。 |
 | `transfer.chunkBytes` | `integer` / `32768` / 1024..65536 | 每塊原始位元組／小位元組 API 上限。Guest 與 Host 都用；修改使繫結失效，後續 Host 重新繫結。不啟用下載。 | Host 繫結失效，後續允許的呼叫重綁。 |
 | `transfer.idleTimeoutMs` | `integer` / `120000` / 10000..900000 | Host 傳輸控制代碼／暫存閒置毫秒期限。新繫結用新值，舊資源保留原期限。 | Host 繫結失效，後續允許的呼叫重綁。 |
 
@@ -58,7 +58,7 @@
 
 
 - agent／terminal／transfer 變更使 Host 繫結及 Guest 工作／傳輸參照失效，下次允許呼叫重綁；不改本機 IPC 執行個體／epoch、不停止已派發程式或改原期限。舊工作可能需 Host 人工檢查，傳輸保留原期限。IPC 組則重啟橋接，即使改的是目前不用的 SID／舊欄位。
-- 關閉不是回復。hostExec 及輪詢／取消／忘記需要 terminal.enabled 和全26操作權限；停用一項也可能無法取消，但工作原逾時仍在。覆蓋／父目錄另檢查 write／mkdir；applyPatch 檢查 edit/create/move/delete；直接 Host 寫磁碟不走文件 save 權限。
-- readMany/providerRead 共用 read；searchSnapshot/searchResults 共用 search；findFilesSnapshot 共用 findFiles；hostStat 共用 stat，雜湊另需 readBytes；工作控制共用 hostExec；傳輸用 largeTransfers 及方向對應 readBytes/writeBytes。Host 搜尋／複製／修補／位元組／工作需 terminal.enabled，快照／語言／文件不需。largeTransfers 不啟用不可用的大檔下載。
+- 關閉不是回復。hostExec 及輪詢／取消／忘記需要 host.enabled 和全26操作權限；停用一項也可能無法取消，但工作原逾時仍在。覆蓋／父目錄另檢查 write／mkdir；applyPatch 檢查 edit/create/move/delete；直接 Host 寫磁碟不走文件 save 權限。
+- readMany/providerRead 共用 read；searchSnapshot/searchResults 共用 search；findFilesSnapshot 共用 findFiles；hostStat 共用 stat，雜湊另需 readBytes；工作控制共用 hostExec；傳輸用 largeTransfers 及方向對應 readBytes/writeBytes。Host 搜尋／複製／修補／位元組／工作需 host.enabled，快照／語言／文件不需。largeTransfers 不啟用不可用的大檔下載。
 - 目前讀取的字面設定鍵均在公開 manifest，未發現額外隱藏設定。ipc.legacySidSnapshot 是內部 globalState，**非設定**。timeoutMs/waitMs 與 hostBind hostWorkspacePath 是請求引數；摘要上限、固定 IPC／Host 回應與握手等待不是 UI 設定。
 - 開關不建立／分享終端、不證明 Host RW，也不解決未知已送結果。見 [IPC](IPC-SECURITY.zh-TW.md)、[API](API.zh-TW.md)、[啟動診斷](STARTUP-DIAGNOSTICS.zh-TW.md)。agent 未明確獲准不得自行啟用或擴權。

@@ -9,9 +9,9 @@ Agents use the bridge through its MCP server. Setup, the full tool list and resu
 1. Install the VSIX in the connected Guest window's Profile.
 2. Run **Live Share Workspace Bridge: Copy MCP Server Configuration** and add the server to your agent as described in the [MCP guide](MCP.md). The VS Code built-in agent discovers it without configuration.
 3. Have the agent call `lswb_list_workspaces` once and choose the intended root. Every other tool takes that exact root `uri` as its `workspace` argument.
-4. Open **Live Share Workspace Bridge: Configure Agent Permissions**. Agent access defaults on; terminal access defaults off. Adjust the English operation switches manually.
-5. For Host capabilities, have the Host share a Windows PowerShell terminal in read/write mode. Connect to it in the Guest. Set the exact terminal name when multiple shared terminals exist. An optional explicit Host root can be configured; paths are not guessed.
-6. Have the agent call `lswb_host_status` and `lswb_host_bind` in the authorized task. If the terminal is missing, the agent asks once and waits. It never starts work in an ordinary Guest terminal or bypasses settings.
+4. Open **Live Share Workspace Bridge: Configure Agent Permissions**. Agent access defaults on; Host access (`host.enabled`) defaults off. Adjust the English operation switches manually.
+5. For Host capabilities, have the Host share a Windows PowerShell terminal in read/write mode. Connect to it in the Guest. The bridge uses it once to start a Host helper; set the exact terminal name (`host.terminalName`) when multiple shared terminals exist. An optional explicit Host root can be configured; paths are not guessed.
+6. Have the agent call `lswb_host_status` and `lswb_host_bind` in the authorized task. The Host then runs "Live Share: Share Server" for the port the bridge shows, and the agent polls `lswb_host_status` until bound. If the terminal is missing, the agent asks once and waits. It never starts work in an ordinary Guest terminal or bypasses settings.
 
 ## Text work
 
@@ -33,7 +33,7 @@ Use `lswb_read_bytes`/`lswb_write_bytes` for small raw data. `lswb_copy` and `ls
 
 ## Errors and controls
 
-The master and terminal switches take effect on requests without restart. They do not undo dispatched work. Disabled permissions are reported, not changed by the agent. Already-sent mutations with uncertain outcomes (`transport_outcome_unknown`) are inspected before retry, never blindly replayed.
+The master and Host switches take effect on requests without restart. They do not undo dispatched work. Disabled permissions are reported, not changed by the agent. Already-sent mutations with uncertain outcomes (`transport_outcome_unknown`) are inspected before retry, never blindly replayed.
 
 Host writes can precede Guest model reload. The bridge verifies affected open buffers against targeted normalized Host hashes; it never globally reverts the editor. If editor_refresh_pending is returned, preserve buffers and use an explicit Host byte read or reopen the document.
 
