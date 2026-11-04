@@ -15,12 +15,12 @@
 | 設定 | 意味 |
 |---|---|
 | `agent.enabled` | 全体スイッチ。既定 true。info/status は検査可能です。 |
-| `terminal.enabled` | Host 共有端末アクセス。既定 false。無効時は全 Host 操作の実効権限が無効です。 |
+| `host.enabled` | Host 共有端末アクセス。既定 false。無効時は全 Host 操作の実効権限が無効です。 |
 | `permissions.OPERATION` | 操作別権限。別名は基本操作を継承し、`info.permissions.configured/effective` で確認できます。 |
-| `terminal.name` | 正確な共有 RW 端末名。空欄なら適格な共有端末が一つ必要です。Guest ローカル端末は除外します。 |
-| `terminal.hostWorkspacePath` | 任意の明示 Host ルート。未指定なら共有 PowerShell の現在ディレクトリを検証します。 |
-| `terminal.commandTimeoutMs` | 既定 120000、範囲 1000..3600000 ミリ秒。 |
-| `terminal.maxOutputCharacters` | stdout/stderr それぞれの保持文字数。既定 65536、範囲 1024..262144。 |
+| `host.terminalName` | 正確な共有 RW 端末名。空欄なら適格な共有端末が一つ必要です。Guest ローカル端末は除外します。 |
+| `host.workspacePath` | 任意の明示 Host ルート。未指定なら共有 PowerShell の現在ディレクトリを検証します。 |
+| `host.commandTimeoutMs` | 既定 120000、範囲 1000..3600000 ミリ秒。 |
+| `host.maxOutputCharacters` | stdout/stderr それぞれの保持文字数。既定 65536、範囲 1024..262144。 |
 | `transfer.chunkBytes` | 1 チャンクの生バイト数。既定 32768、範囲 1024..65536。 |
 | `transfer.idleTimeoutMs` | 転送ハンドル／一時資源のアイドル期限。既定 120000、範囲 10000..900000 ミリ秒。 |
 

@@ -56,9 +56,10 @@ function activate(context) {
     const health=startup.snapshot().current.health;
     if (!status || !api?.roots().length) { if(status&&health==='failed'){status.text='$(warning) LSWB: IPC failed';status.tooltip='Guest local IPC startup failed. Run Show Startup Diagnostics; shell identity/policy scope may be unknown.';status.command='liveshareWorkspaceBridge.showStartupDiagnostics';status.show();}else status?.hide();return; }
     status.command='liveshareWorkspaceBridge.openSettings';
-    const agent = api.permissions.value('agent.enabled', true), terminal = api.permissions.value('terminal.enabled', false);
-    status.text = !agent ? '$(lock) LSWB: Agent off' : terminal ? '$(terminal) LSWB: Host allowed' : '$(files) LSWB: Guest only';
-    status.tooltip = !agent ? 'Agent operations are disabled. Click to configure permissions.' : terminal ? 'Host terminal access is allowed; individual permissions and a verified shared RW terminal are still required. Click to configure permissions.' : 'Host terminal access is disabled. Guest operations follow their individual permissions. Click to configure permissions.';
+    const agent = api.permissions.value('agent.enabled', true);
+    const hostEnabled = api.permissions.value('host.enabled', false);
+    status.text = !agent ? '$(lock) LSWB: Agent off' : hostEnabled ? '$(terminal) LSWB: Host allowed' : '$(files) LSWB: Guest only';
+    status.tooltip = !agent ? 'Agent operations are disabled. Click to configure permissions.' : hostEnabled ? 'Host access is allowed; individual permissions and a shared RW terminal to start the Host helper are still required. Click to configure permissions.' : 'Host access is disabled. Guest operations follow their individual permissions. Click to configure permissions.';
     status.tooltip+=' Local IPC: '+health+'.';
     if(health==='failed')status.text='$(warning) '+status.text;
     status.show();

@@ -15,12 +15,12 @@
 | 設定 | 含義 |
 |---|---|
 | `agent.enabled` | 總開關，預設 true；info/status 仍可檢查。 |
-| `terminal.enabled` | Host 共用終端存取，預設 false；關閉時所有 Host 功能的有效權限關閉。 |
+| `host.enabled` | Host 共用終端存取，預設 false；關閉時所有 Host 功能的有效權限關閉。 |
 | `permissions.OPERATION` | 單項權限；別名繼承基礎操作，見 `info.permissions.configured/effective`。 |
-| `terminal.name` | 準確的共用 RW 終端名；留空時必須只有一個合格共用終端，排除 Guest 本機終端。 |
-| `terminal.hostWorkspacePath` | 可選顯式 Host 根目錄；否則驗證共用 PowerShell 當前目錄。 |
-| `terminal.commandTimeoutMs` | 預設 120000，範圍 1000..3600000 毫秒。 |
-| `terminal.maxOutputCharacters` | stdout/stderr 各自保留的字元數，預設 65536，範圍 1024..262144。 |
+| `host.terminalName` | 準確的共用 RW 終端名；留空時必須只有一個合格共用終端，排除 Guest 本機終端。 |
+| `host.workspacePath` | 可選顯式 Host 根目錄；否則驗證共用 PowerShell 當前目錄。 |
+| `host.commandTimeoutMs` | 預設 120000，範圍 1000..3600000 毫秒。 |
+| `host.maxOutputCharacters` | stdout/stderr 各自保留的字元數，預設 65536，範圍 1024..262144。 |
 | `transfer.chunkBytes` | 單塊原始位元組數，預設 32768，範圍 1024..65536。 |
 | `transfer.idleTimeoutMs` | 傳輸句柄／暫存資源空閑壽命，預設 120000，範圍 10000..900000 毫秒。 |
 

@@ -15,12 +15,12 @@
 | 设置 | 含义 |
 |---|---|
 | `agent.enabled` | 总开关，默认 true；info/status 仍可检查。 |
-| `terminal.enabled` | Host 共享终端访问，默认 false；关闭时所有 Host 功能的有效权限关闭。 |
+| `host.enabled` | Host 共享终端访问，默认 false；关闭时所有 Host 功能的有效权限关闭。 |
 | `permissions.OPERATION` | 单项权限；别名继承基础操作，见 `info.permissions.configured/effective`。 |
-| `terminal.name` | 准确的共享 RW 终端名；留空时必须只有一个合格共享终端，排除 Guest 本地终端。 |
-| `terminal.hostWorkspacePath` | 可选显式 Host 根目录；否则验证共享 PowerShell 当前目录。 |
-| `terminal.commandTimeoutMs` | 默认 120000，范围 1000..3600000 毫秒。 |
-| `terminal.maxOutputCharacters` | stdout/stderr 各自保留的字符数，默认 65536，范围 1024..262144。 |
+| `host.terminalName` | 准确的共享 RW 终端名；留空时必须只有一个合格共享终端，排除 Guest 本地终端。 |
+| `host.workspacePath` | 可选显式 Host 根目录；否则验证共享 PowerShell 当前目录。 |
+| `host.commandTimeoutMs` | 默认 120000，范围 1000..3600000 毫秒。 |
+| `host.maxOutputCharacters` | stdout/stderr 各自保留的字符数，默认 65536，范围 1024..262144。 |
 | `transfer.chunkBytes` | 单块原始字节数，默认 32768，范围 1024..65536。 |
 | `transfer.idleTimeoutMs` | 传输句柄／暂存资源空闲寿命，默认 120000，范围 10000..900000 毫秒。 |
 

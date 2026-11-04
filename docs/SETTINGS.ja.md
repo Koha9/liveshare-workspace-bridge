@@ -9,15 +9,15 @@
 | 設定（接頭辞省略） | 型／既定／範囲 | 目的と安全 | 反映 |
 |---|---|---|---|
 | `agent.enabled` | `boolean` / `true` | ワークスペース操作の全体スイッチ。info/hostStatus と安全な診断は確認可能で、送信済み効果は戻しません。 | 後続要求に即時反映、Host バインド／参照も破棄。 |
-| `terminal.enabled` | `boolean` / `false` | Host API を許可しますが個別権限と検証済み共有 RW 端末も必要です。所有 bootstrap の作成／削除を伴い、通常 Guest shell を Host へ置換しません。 | 後続要求に即時反映、Host バインド／参照も破棄。 |
+| `host.enabled` | `boolean` / `false` | Host API を許可しますが個別権限と検証済み共有 RW 端末も必要です。所有 bootstrap の作成／削除を伴い、通常 Guest shell を Host へ置換しません。 | 後続要求に即時反映、Host バインド／参照も破棄。 |
 | `powershell` | `string` / `""` | Guest ローカル IPC／アカウント補助プロセスの PowerShell 指定。空なら標準 Windows PowerShell。Host shell 選択や実行ポリシー変更ではありません。 | 次のローカル起動で反映。実行中を自動切替しません。 |
 | `ipc.accessMode` | `string` / `"ownerOnly"` | ownerOnly/selectedUsers（0.3.0 で削除された allLocalUsers は ownerOnly として動作し、設定は書き換えません）。所有者は保持、追加は現在のローカル SAM と同 Windows session ID のみ。Everyone、グループ、全ドメインユーザーではなく DC は拒否。全プロセスを信頼し Codex ファイルシステム沙箱外ですが橋接権限に従います。 | IPC 再起動、新 instance/epoch。再検出。 |
 | `ipc.selectedUserSids` | `array` / `[]` | selectedUsers だけで使う安定 SID。重複なし最大256文字列、UI は形式、実装は1件184文字とローカル SAM 所属を検証。表示名変更は維持、削除再作成は非継承。 | IPC 再起動、新 instance/epoch。再検出。 |
 | `ipc.allowCodexSandboxClients` | `boolean` / `false` | 非推奨の互換設定。明示 User モードなしの true は既存二 sandbox SID を selectedUsers へ固定、false/未指定は ownerOnly。明示モード優先、全員／Host を自動有効化しません。初回 User 設定を移行し、過去に削除再作成された SID をブールから復元できません。 | IPC 再起動、新 instance/epoch。再検出。 |
-| `terminal.name` | `string` / `""` | 対象共有端末の正確な名前。空なら適格 PTY が一つ必要で、read-only 確認とバインドは別途実施。タイトルだけで shell/版は確定しません。 | Host バインドを破棄、次の許可済み呼出しで再接続。 |
-| `terminal.hostWorkspacePath` | `string` / `""` | 任意の明示 Host ルート。空は共有 PowerShell の現在ディレクトリを Guest と検証。Guest ローカルパスではなく hostBind 引数で上書き可能。 | Host バインドを破棄、次の許可済み呼出しで再接続。 |
-| `terminal.commandTimeoutMs` | `integer` / `120000` / 1000..3600000 | Host 子コマンドの既定ミリ秒期限。hostExec timeoutMs で範囲内上書き可能。実行中期限は変わらず、全 IPC／握手タイムアウトではありません。 | Host バインドを破棄、次の許可済み呼出しで再接続。 |
-| `terminal.maxOutputCharacters` | `integer` / `65536` / 1024..262144 | stdout/stderr ごとの保持文字数。超過分も排出して truncated を明示し、全出力とはしません。 | Host バインドを破棄、次の許可済み呼出しで再接続。 |
+| `host.terminalName` | `string` / `""` | 対象共有端末の正確な名前。空なら適格 PTY が一つ必要で、read-only 確認とバインドは別途実施。タイトルだけで shell/版は確定しません。 | Host バインドを破棄、次の許可済み呼出しで再接続。 |
+| `host.workspacePath` | `string` / `""` | 任意の明示 Host ルート。空は共有 PowerShell の現在ディレクトリを Guest と検証。Guest ローカルパスではなく hostBind 引数で上書き可能。 | Host バインドを破棄、次の許可済み呼出しで再接続。 |
+| `host.commandTimeoutMs` | `integer` / `120000` / 1000..3600000 | Host 子コマンドの既定ミリ秒期限。hostExec timeoutMs で範囲内上書き可能。実行中期限は変わらず、全 IPC／握手タイムアウトではありません。 | Host バインドを破棄、次の許可済み呼出しで再接続。 |
+| `host.maxOutputCharacters` | `integer` / `65536` / 1024..262144 | stdout/stderr ごとの保持文字数。超過分も排出して truncated を明示し、全出力とはしません。 | Host バインドを破棄、次の許可済み呼出しで再接続。 |
 | `transfer.chunkBytes` | `integer` / `32768` / 1024..65536 | チャンクの生バイト／小容量 API 上限。Guest 検証と Host で使い、変更はバインドを破棄して次の Host 作業で再バインド。ダウンロード有効化ではありません。 | Host バインドを破棄、次の許可済み呼出しで再接続。 |
 | `transfer.idleTimeoutMs` | `integer` / `120000` / 10000..900000 | Host 転送ハンドル／一時資源のアイドル期限ミリ秒。新バインドで反映し、旧資源の期限は保持。 | Host バインドを破棄、次の許可済み呼出しで再接続。 |
 
@@ -58,7 +58,7 @@
 
 
 - agent/terminal/transfer 変更は Host バインドと Guest のジョブ／転送参照を破棄し、次の許可要求で再接続します。ローカル IPC instance/epoch、実行中子プロセス、元期限は変えません。旧ジョブは Host の手動確認が必要な場合があり、転送は元の期限です。IPC キー変更は未使用 SID/旧項目でもブリッジを再起動します。
-- 無効化はロールバックではありません。hostExec と poll/cancel/forget は terminal.enabled と全26操作権限が必要で、一つの無効化でも cancel 不可になり得ますが子期限は残ります。上書き／親作成は write/mkdir、パッチは edit/create/move/delete を確認。直接 Host ディスク操作は文書 save を使いません。
+- 無効化はロールバックではありません。hostExec と poll/cancel/forget は host.enabled と全26操作権限が必要で、一つの無効化でも cancel 不可になり得ますが子期限は残ります。上書き／親作成は write/mkdir、パッチは edit/create/move/delete を確認。直接 Host ディスク操作は文書 save を使いません。
 - readMany/providerRead は read、searchSnapshot/searchResults は search、findFilesSnapshot は findFiles、hostStat は stat（hash は readBytes も）、ジョブ制御は hostExec、転送は largeTransfers と方向別 readBytes/writeBytes を継承します。Host 検索／コピー／パッチ／バイト／ジョブは端末必須、snapshot／言語／文書は不要。largeTransfers で無効 download は有効になりません。
 - 現実装の設定キーは全て公開 manifest にあり、追加の隠し設定はありません。ipc.legacySidSnapshot は内部 globalState で **設定ではありません**。timeoutMs/waitMs、hostBind hostWorkspacePath は要求引数です。起動記録上限や固定 IPC／Host 応答／握手待ちを UI 設定として扱いません。
 - スイッチは端末共有、Host RW 証明、結果不明要求の解決を行いません。[IPC](IPC-SECURITY.ja.md)、[API](API.ja.md)、[起動診断](STARTUP-DIAGNOSTICS.ja.md)を参照し、agent は明示許可なしに有効化／拡大しません。

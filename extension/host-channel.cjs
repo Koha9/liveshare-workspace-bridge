@@ -1,21 +1,20 @@
 'use strict';
 // Host channel: binds the shared workspace root to a Host helper and routes
-// requests through the selected transport. Requests are strictly serialized;
-// an unknown outcome makes the channel uncertain and nothing is replayed.
+// requests to it. Requests are strictly serialized; an unknown outcome makes
+// the channel uncertain and nothing is replayed.
 //
-// host.transport = sharedTerminal (default): every request is typed into the
-// shared Host terminal. portForward: the terminal starts a foreground Host
-// helper once, the Host shares its port through Live Share, and requests use
-// loopback TCP.
+// The shared Host terminal is used once to start a foreground Host helper; the
+// Host shares its port through Live Share and requests use loopback TCP.
 const crypto = require('node:crypto');
 const { fail } = require('./core.cjs');
+const { NAMESPACE, RENAMED_SETTINGS } = require('./permissions.cjs');
 const bootstrap = require('./host-bootstrap.cjs');
-const { createTerminalTransport } = require('./host-transport-terminal.cjs');
+const { createTerminalSelector } = require('./host-terminal.cjs');
 const tcp = require('./host-transport-tcp.cjs');
 
-const { psString, renderBootstrap, newNonce } = bootstrap;
+const { newNonce } = bootstrap;
 const { MUTATION_ACTIONS } = tcp;
-const TRANSPORTS = ['sharedTerminal', 'portForward'];
+const TRANSPORT = 'portForward';
 const BANNER_TIMEOUT_MS = 30000;
 const SHUTDOWN_TIMEOUT_MS = 1000;
 const HANDSHAKE_ATTEMPT_MS = 1500;
@@ -25,8 +24,8 @@ const RECOVERY_HINT = 'Before binding again, ask the Host to press Ctrl+C in the
 
 function readHostLimits(permissions) {
   const limits = {
-    timeout: permissions.value('terminal.commandTimeoutMs', 120000),
-    output: permissions.value('terminal.maxOutputCharacters', 65536),
+    timeout: permissions.value('host.commandTimeoutMs', 120000),
+    output: permissions.value('host.maxOutputCharacters', 65536),
     ttl: permissions.value('transfer.idleTimeoutMs', 120000),
     chunkBytes: permissions.value('transfer.chunkBytes', 32768),
   };
@@ -42,14 +41,6 @@ function readHostLimits(permissions) {
     }
   }
   return limits;
-}
-
-function readTransport(permissions) {
-  const transport = permissions.value('host.transport', 'sharedTerminal');
-  if (!TRANSPORTS.includes(transport)) {
-    fail('invalid_configuration', 'liveshareWorkspaceBridge.host.transport must be sharedTerminal or portForward.');
-  }
-  return transport;
 }
 
 function readIntegerSetting(permissions, key, fallback, min, max) {
@@ -89,7 +80,7 @@ function assertActionPermissions(permissions, op, action) {
 }
 
 function abortReason(reason) {
-  const passThrough = ['workspace_changed', 'host_channel_closed', 'host_transport_changed'];
+  const passThrough = ['workspace_changed', 'host_channel_closed'];
   const code = passThrough.includes(reason?.code) ? reason.code : 'host_access_revoked';
   return Object.assign(new Error(reason?.message || 'Host handshake stopped.'), { code, details: reason });
 }
@@ -117,7 +108,8 @@ function createHostChannel(vscode, identity, permissions, internal = {}) {
   const state = { pending: null, uncertain: false };
   const jobs = new Map();
   const transfers = new Map();
-  const terminalTransport = createTerminalTransport({ vscode, permissions, state });
+  const terminals = createTerminalSelector({ vscode, permissions });
+  const notices = new Set();
   let binding = null;
   let queue = Promise.resolve();
   let disposed = false;
@@ -148,7 +140,7 @@ function createHostChannel(vscode, identity, permissions, internal = {}) {
     if (!binding || binding.key !== bindingKey(root)) {
       return false;
     }
-    return binding.transport === 'tcp' || vscode.window.terminals.includes(binding.terminal);
+    return true;
   }
 
   function clearBinding() {
@@ -159,21 +151,35 @@ function createHostChannel(vscode, identity, permissions, internal = {}) {
     return previous;
   }
 
-  function configuredTransport() {
-    try {
-      return readTransport(permissions);
-    } catch {
-      return null;
+  function noticeOnce(key, message) {
+    if (notices.has(key)) {
+      return;
+    }
+    notices.add(key);
+    log(message);
+  }
+
+  // Legacy settings are still read for one version; they are never rewritten.
+  function noteLegacySettings() {
+    for (const legacy of permissions.legacySettingsInUse()) {
+      const renamed = Object.keys(RENAMED_SETTINGS).find(key => RENAMED_SETTINGS[key] === legacy);
+      noticeOnce(legacy, `liveshareWorkspaceBridge.${legacy} is deprecated; using it because ${renamed} is not set. `
+        + `Rename it to liveshareWorkspaceBridge.${renamed} in User settings; the bridge does not change settings.`);
+    }
+    const inspected = vscode.workspace.getConfiguration?.(NAMESPACE)?.inspect?.('host.transport');
+    if (inspected?.globalValue === 'sharedTerminal') {
+      noticeOnce('host.transport', 'liveshareWorkspaceBridge.host.transport is removed; sharedTerminal is no longer supported, using portForward.');
     }
   }
 
   function status(root) {
-    const transport = configuredTransport();
+    noteLegacySettings();
+    const transport = TRANSPORT;
     const denial = permissions.reason('hostBind');
     if (denial) {
       return { available: false, bound: false, reason: denial.code, message: denial.message, candidates: [], transport, handshake: { ...handshake } };
     }
-    const eligible = terminalTransport.candidates();
+    const eligible = terminals.candidates();
     const bound = isBound(root);
     let reason = null;
     if (eligible.length !== 1) {
@@ -188,7 +194,7 @@ function createHostChannel(vscode, identity, permissions, internal = {}) {
       transport,
       handshake: { ...handshake },
     };
-    if (bound && binding.transport === 'tcp') {
+    if (bound) {
       result.port = binding.port;
     }
     return result;
@@ -200,71 +206,13 @@ function createHostChannel(vscode, identity, permissions, internal = {}) {
     }
   }
 
-  async function bindTerminal(root, options) {
-    const expectedEpoch = identity.epoch();
-    const terminal = terminalTransport.selectTerminal();
-    const nonce = newNonce();
-    const functionName = 'Invoke_Lswb_' + newNonce();
-    const script = renderBootstrap();
-    const file = bootstrap.prepareBootstrapFile(vscode, root, script);
-    const limits = readHostLimits(permissions);
-    const chosenRoot = options.hostWorkspacePath || permissions.value('terminal.hostWorkspacePath', '');
-    const payload = Buffer.from(JSON.stringify({ action: 'hello', requestNonce: nonce })).toString('base64');
-    const command = bootstrap.buildTerminalBindCommand({
-      rootExpression: bootstrap.rootExpressionFor(chosenRoot),
-      filename: file.filename,
-      sha256: file.sha256,
-      functionName,
-      limits,
-      payload,
-      nonce,
-    });
-    try {
-      await bootstrap.writeBootstrapFile(vscode, file, script);
-      assertEpoch(expectedEpoch);
-      permissions.assert('hostBind');
-      const response = await terminalTransport.capture(terminal, 'hostBind', nonce, command, 30000);
-      if (!response.ok) {
-        fail(response.error.code, response.error.message);
-      }
-      assertEpoch(expectedEpoch);
-      if (response.result.protocol !== 2) {
-        fail('host_protocol_mismatch', 'Unexpected Host helper protocol.');
-      }
-      binding = {
-        key: bindingKey(root),
-        root: root.toString(),
-        transport: 'terminal',
-        terminal,
-        functionName,
-        noEchoInput: response.result.noEchoInput === true,
-        chunkBytes: response.result.chunkBytes,
-      };
-      jobs.clear();
-      transfers.clear();
-      state.uncertain = false;
-      return {
-        bound: true,
-        workspace: root.toString(),
-        terminal: terminal.name,
-        protocol: 2,
-        noEchoInput: binding.noEchoInput,
-        chunkBytes: binding.chunkBytes,
-      };
-    } finally {
-      if (identity.epoch() === expectedEpoch) {
-        await bootstrap.deleteBootstrapFile(vscode, file);
-      }
-    }
-  }
-
   // Starts the foreground helper through the shared terminal and returns its
   // banner. The bootstrap file (which holds the token) is deleted as soon as
   // the banner arrives or the attempt ends.
   async function launchHelper(root, terminal, options, expectedEpoch) {
     const limits = readHostLimits(permissions);
     const settings = readPortForwardSettings(permissions);
-    const chosenRoot = options.hostWorkspacePath || permissions.value('terminal.hostWorkspacePath', '');
+    const chosenRoot = options.hostWorkspacePath || permissions.value('host.workspacePath', '');
     const requestedPort = await tcp.chooseGuestPort({ excludedRanges: await tcp.queryExcludedPortRanges() });
     const token = crypto.randomBytes(32).toString('hex');
     const nonce = newNonce();
@@ -469,21 +417,10 @@ function createHostChannel(vscode, identity, permissions, internal = {}) {
       return pendingBindResult(handshakeTask);
     }
     const expectedEpoch = identity.epoch();
-    const terminal = terminalTransport.selectTerminal();
+    const terminal = terminals.selectTerminal();
     const launched = await launchForPortForward(root, terminal, options, expectedEpoch);
     const task = startBackgroundHandshake(root, terminal, launched, expectedEpoch);
     return pendingBindResult(task);
-  }
-
-  // A transport switch must not leave the helper handshake holding the
-  // terminal's pending slot while commands are typed there.
-  async function abortHandshakeForTransportSwitch() {
-    const task = handshakeTask;
-    if (!task) {
-      return;
-    }
-    state.pending?.reject({ code: 'host_transport_changed', message: 'host.transport changed while the Host helper handshake was waiting.' });
-    await task.settled;
   }
 
   async function bind(root, options = {}) {
@@ -491,42 +428,16 @@ function createHostChannel(vscode, identity, permissions, internal = {}) {
     if (state.uncertain && options.acknowledgeRecovery !== true) {
       fail('host_channel_uncertain', 'Inspect the shared Host terminal and explicitly rebind with acknowledgeRecovery:true once idle. No command was replayed.');
     }
-    if (readTransport(permissions) === 'portForward') {
-      return bindPortForward(root, options);
-    }
-    await abortHandshakeForTransportSwitch();
-    // A running helper occupies the terminal; stop it before typing commands there.
-    if (binding?.transport === 'tcp') {
-      await shutdownHelper(clearBinding());
-    }
-    return bindTerminal(root, options);
+    noteLegacySettings();
+    return bindPortForward(root, options);
   }
 
-  // workspace.cjs does not watch host.* settings, so a transport switch is
-  // detected here and forces a fresh bind.
-  async function dropBindingOnTransportSwitch() {
-    const wantsTcp = readTransport(permissions) === 'portForward';
-    if (!wantsTcp) {
-      await abortHandshakeForTransportSwitch();
-    }
-    if (!binding) {
-      return;
-    }
-    if (wantsTcp !== (binding.transport === 'tcp')) {
-      shutdownHelper(clearBinding());
-    }
-  }
-
-  function send(op, action, options) {
-    if (binding.transport === 'tcp') {
-      return tcp.sendTcpRequest({ port: binding.port, token: binding.token, action, timeoutMs: options.timeoutMs, state });
-    }
-    return terminalTransport.perform(binding, op, action, options);
+  function send(action, options) {
+    return tcp.sendTcpRequest({ port: binding.port, token: binding.token, action, timeoutMs: options.timeoutMs, state });
   }
 
   async function perform(root, op, action, options = {}) {
     permissions.assert(op);
-    await dropBindingOnTransportSwitch();
     if (handshakeTask) {
       failHandshakePending();
     }
@@ -534,14 +445,14 @@ function createHostChannel(vscode, identity, permissions, internal = {}) {
       await bind(root);
     }
     if (!isBound(root)) {
-      // A portForward auto-bind only started the handshake.
+      // An auto-bind only started the handshake.
       failHandshakePending();
     }
     if (state.uncertain) {
       fail('host_channel_uncertain', 'Host command outcome is unknown. Inspect the Host and explicitly recover the binding.');
     }
     assertActionPermissions(permissions, op, action);
-    const response = await send(op, action, options);
+    const response = await send(action, options);
     if (!response.ok) {
       const details = { action: action.action, mutationMayHaveOccurred: MUTATION_ACTIONS.includes(action.action) };
       fail(response.error.code || 'host_error', response.error.message, details);
@@ -589,16 +500,13 @@ function createHostChannel(vscode, identity, permissions, internal = {}) {
     return entry;
   }
 
-  // In portForward mode the helper may outlive a closed terminal view, so a
-  // binding is not dropped here; the next failing request shows it instead.
+  // The helper may outlive a closed terminal view, so a binding is not
+  // dropped here; the next failing request shows it instead. Only a helper
+  // still starting (banner or handshake wait) is stopped.
   function terminalClosed(terminal) {
     const pending = state.pending;
-    if (pending?.terminal === terminal && (pending.kind === 'handshake' || pending.kind === 'banner')) {
+    if (pending?.terminal === terminal) {
       pending.reject({ code: 'host_channel_closed', message: 'The Host terminal closed while the Host helper was starting.' }, false);
-      return;
-    }
-    if ((binding?.transport !== 'tcp' && binding?.terminal === terminal) || pending?.terminal === terminal) {
-      changed(true);
     }
   }
 
@@ -624,4 +532,4 @@ function createHostChannel(vscode, identity, permissions, internal = {}) {
   };
 }
 
-module.exports = { createHostChannel, renderBootstrap, psString };
+module.exports = { createHostChannel };

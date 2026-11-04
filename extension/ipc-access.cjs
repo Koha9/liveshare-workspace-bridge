@@ -2,6 +2,7 @@
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { classifyStartupStderr } = require('./startup-diagnostics.cjs');
+const { readSetting } = require('./permissions.cjs');
 
 const MODES = ['ownerOnly', 'selectedUsers'];
 // Removed in 0.3.0. An existing User value runs as the narrower ownerOnly;
@@ -236,7 +237,7 @@ async function pickAccounts(vscode, config, listUsers) {
 }
 
 function hostScopeNote(config) {
-  if (config.get('terminal.enabled', false) === true) {
+  if (readSetting(config, 'host.enabled', false) === true) {
     return 'Host terminal access is enabled; allowed processes may also run Host commands if other requirements are met.';
   }
   return 'Host terminal access remains independently controlled.';

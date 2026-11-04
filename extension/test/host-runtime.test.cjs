@@ -1,57 +1,114 @@
 'use strict';
-const {test}=require('node:test');
-const assert=require('node:assert/strict');
-const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto');
-const {spawn}=require('node:child_process');
-const {renderBootstrap,psString}=require('../host-channel.cjs');
-test('Windows Host helper preserves bytes, verifies chunked transfers, executes bounded jobs and rejects escapes', {skip:process.platform!=='win32',timeout:45000},async t=>{
-  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'lswb runtime '));
-  t.after(()=>{assert.ok(path.resolve(directory).startsWith(path.resolve(os.tmpdir())+path.sep)&&path.basename(directory).startsWith('lswb runtime '));fs.rmSync(directory,{recursive:true,force:true});});
-  const bootstrap=path.join(directory,'bootstrap.ps1');fs.writeFileSync(bootstrap,renderBootstrap());
-  const script=path.join(directory,'test.ps1');
-  const body=`$ErrorActionPreference='Stop'
-& ([ScriptBlock]::Create([IO.File]::ReadAllText(${psString(bootstrap)}))) -FunctionName 'Invoke_Lswb_00000000000000000000000000000000' -WorkspaceRoot ${psString(directory)} -OutputLimit 1024 -ChunkBytes 32768 -TransferTtl 10000
-function Invoke-Test($request){
- $n=[Guid]::NewGuid().ToString('N');$request.requestNonce=$n;$p=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($request|ConvertTo-Json -Compress -Depth 20)))
- $old=[Console]::Out;$writer=[IO.StringWriter]::new()
- try{[Console]::SetOut($writer);& 'Invoke_Lswb_00000000000000000000000000000000' -Payload $p -Nonce $n}finally{[Console]::SetOut($old)}
- if($writer.ToString() -notmatch ('LSWB_RESULT:'+$n+':([\\s\\S]*?)LSWB_END:'+$n)){throw 'Missing test frame'}
- return ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(($matches[1] -replace '\\s','')))|ConvertFrom-Json)
+// End-to-end checks of the Host actions (host-core.ps1 and host-runtime.cs)
+// through the rendered single-file Host helper over loopback TCP.
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const { renderServerBootstrap } = require('../host-bootstrap.cjs');
+const { SKIP, makeRoot, freePorts, startScript, request } = require('./host-server-helpers.cjs');
+
+const ALL_BYTES = Buffer.from(Array.from({ length: 256 }, (_, index) => index));
+
+function sha256(bytes) {
+  return crypto.createHash('sha256').update(bytes).digest('hex');
 }
-function Assert($condition,$message){if(-not $condition){throw $message}}
-$count=0
-$escape=Invoke-Test @{action='stat';path='../outside'};Assert (-not $escape.ok -and $escape.error.code -eq 'outside_workspace') 'Traversal accepted';$count++
-$raw=[byte[]](0..255);$b64=[Convert]::ToBase64String($raw);$hash=([Security.Cryptography.SHA256]::Create().ComputeHash($raw)|ForEach-Object{$_.ToString('x2')}) -join ''
-$write=Invoke-Test @{action='writeBytes';path='bytes.bin';base64=$b64;sha256=$hash};Assert ($write.ok -and $write.result.written) 'Byte write failed'
-$read=Invoke-Test @{action='readBytes';path='bytes.bin'};Assert ($read.ok -and $read.result.base64 -ceq $b64 -and $read.result.sha256 -eq $hash) 'Byte fidelity failed';$count++
-$old=[IO.File]::ReadAllBytes((Join-Path ${psString(directory)} 'bytes.bin'))
-$refused=Invoke-Test @{action='writeBytes';path='bytes.bin';base64=$b64;sha256=$hash};Assert (-not $refused.ok) 'Overwrite accepted without flag';$count++
-$wrong=Invoke-Test @{action='writeBytes';path='bytes.bin';base64=$b64;sha256=$hash;overwrite=$true;expectedCurrentSha256=('0'*64)};Assert (-not $wrong.ok -and [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path ${psString(directory)} 'bytes.bin'))) -ceq $b64) 'Wrong overwrite guard changed the file';$count++
-$begin=Invoke-Test @{action='beginWrite';path='nested/large.bin';size=768;parents=$true};Assert $begin.ok 'Upload begin failed';$id=$begin.result.transferId
-for($i=0;$i -lt 3;$i++){$chunk=Invoke-Test @{action='writeChunk';transferId=$id;sequence=$i;base64=$b64};Assert $chunk.ok 'Chunk failed';if($i -eq 0){$again=Invoke-Test @{action='writeChunk';transferId=$id;sequence=0;base64=$b64};Assert ($again.result.bytesReceived -eq 256) 'Duplicate chunk appended twice'}}
-$all=[byte[]](@($raw)+@($raw)+@($raw));$allHash=([Security.Cryptography.SHA256]::Create().ComputeHash($all)|ForEach-Object{$_.ToString('x2')}) -join ''
-$commit=Invoke-Test @{action='commitWrite';transferId=$id;path='nested/large.bin';sha256=$allHash};Assert ($commit.ok -and $commit.result.written) 'Commit failed';$count++
-$open=Invoke-Test @{action='openRead';path='nested/large.bin'};Assert $open.ok 'Download begin failed';$offset=0;$download=''
-while($offset -lt 768){$piece=Invoke-Test @{action='readChunk';transferId=$open.result.transferId;offset=$offset;count=200};Assert $piece.ok 'Download chunk failed';$download+=[Convert]::ToBase64String([Convert]::FromBase64String($piece.result.base64));$offset=$piece.result.nextOffset}
-Assert ($piece.result.complete -and $piece.result.sha256 -eq $allHash) 'Download hash failed';$count++
-$copy=Invoke-Test @{action='copyDirectory';path='nested';to='copied';parents=$true};Assert ($copy.ok -and (Get-FileHash -LiteralPath (Join-Path ${psString(directory)} 'copied/large.bin')).Hash -eq $allHash) 'Directory copy failed';$count++
-$job=Invoke-Test @{action='startJob';command='[Console]::Write(("x"*5000));[Console]::Error.Write(("e"*4000));exit 7';waitMs=3000;timeoutMs=5000;cwd=''}
-Assert ($job.ok -and $job.result.state -eq 'completed' -and $job.result.exitCode -eq 7 -and $job.result.stdout.Length -eq 1024 -and $job.result.stdoutTruncated -and $job.result.stderrTruncated) 'Job output/exit handling failed';$count++
-$native=Invoke-Test @{action='startJob';command='cmd.exe /d /c exit 7';waitMs=3000;timeoutMs=5000;cwd=''};Assert ($native.ok -and $native.result.exitCode -eq 7) 'Native exit code lost';$count++
-$failed=Invoke-Test @{action='startJob';command='throw "controlled"';waitMs=3000;timeoutMs=5000;cwd=''};Assert ($failed.ok -and $failed.result.exitCode -eq 1 -and $failed.result.stderr -match 'controlled') 'PowerShell failure lost';$count++
-$inputCheck=Invoke-Test @{action='startJob';command='if($null -eq [Console]::ReadLine()){Write-Output "STDIN_EOF"}else{throw "unexpected input"}';waitMs=3000;timeoutMs=5000;cwd=''};Assert ($inputCheck.ok -and $inputCheck.result.stdout -match 'STDIN_EOF') 'Host child inherited terminal input';$count++
-$slow=Invoke-Test @{action='startJob';command='Start-Sleep -Seconds 30';waitMs=0;timeoutMs=1000;cwd=''};Start-Sleep -Milliseconds 1300;$poll=Invoke-Test @{action='pollJob';jobId=$slow.result.jobId;waitMs=3000;stdoutOffset=0;stderrOffset=0};Assert ($poll.ok -and $poll.result.state -eq 'timed_out') 'Timeout failed';$count++
-$cancel=Invoke-Test @{action='startJob';command='Start-Sleep -Seconds 30';waitMs=0;timeoutMs=10000;cwd=''};$stopped=Invoke-Test @{action='cancelJob';jobId=$cancel.result.jobId};Assert ($stopped.ok -and $stopped.result.state -eq 'cancelled') 'Cancellation failed';$count++
-$close=Invoke-Test @{action='close'};Assert $close.ok 'Close failed'
-[Console]::WriteLine((@{checks=$count;passed=$true}|ConvertTo-Json -Compress))
-`;
-  fs.writeFileSync(script,body);
-  const executable=path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe');
-  const result=await new Promise((resolve,reject)=>{
-    const env={...process.env,PSModulePath:path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/Modules')+';'+(process.env.PSModulePath||'')};
-    const child=spawn(executable,['-NoLogo','-NoProfile','-NonInteractive','-File',script],{windowsHide:true,env});let stdout='',stderr='';
-    child.stdout.on('data',x=>stdout+=x);child.stderr.on('data',x=>stderr+=x);child.once('error',reject);child.once('close',code=>resolve({code,stdout,stderr}));
-  });
-  assert.equal(result.code,0,result.stdout+'\n'+result.stderr);
-  assert.equal(JSON.parse(result.stdout.trim()).checks,13);
+
+async function startHelper(t, root) {
+  const token = crypto.randomBytes(32).toString('hex');
+  const port = await freePorts(1);
+  const scripts = makeRoot(t, 'lswb runtime ');
+  const script = path.join(scripts, 'helper.ps1');
+  const options = { token, port, portAttempts: 1, idleTimeoutMs: 60000, outputLimit: 1024, chunkBytes: 32768, transferTtl: 10000 };
+  fs.writeFileSync(script, renderServerBootstrap(options));
+  const server = startScript(t, script, ['-WorkspaceRoot', root]);
+  await server.banner;
+  const call = async (action, fields = {}) => (await request(port, token, action, fields)).reply;
+  return { server, call };
+}
+
+async function checkBytes(call, root) {
+  const base64 = ALL_BYTES.toString('base64');
+  const hash = sha256(ALL_BYTES);
+  const escape = await call('stat', { path: '../outside' });
+  assert.equal(escape.ok, false);
+  assert.equal(escape.error.code, 'outside_workspace');
+
+  const write = await call('writeBytes', { path: 'bytes.bin', base64, sha256: hash });
+  assert.ok(write.ok && write.result.written, JSON.stringify(write));
+  const read = await call('readBytes', { path: 'bytes.bin' });
+  assert.ok(read.ok && read.result.base64 === base64 && read.result.sha256 === hash, 'byte fidelity');
+
+  const refused = await call('writeBytes', { path: 'bytes.bin', base64, sha256: hash });
+  assert.equal(refused.ok, false, 'overwrite accepted without flag');
+  const guarded = await call('writeBytes', { path: 'bytes.bin', base64, sha256: hash, overwrite: true, expectedCurrentSha256: '0'.repeat(64) });
+  assert.equal(guarded.ok, false);
+  assert.equal(fs.readFileSync(path.join(root, 'bytes.bin')).toString('base64'), base64);
+}
+
+async function checkTransfers(call, root) {
+  const base64 = ALL_BYTES.toString('base64');
+  const begin = await call('beginWrite', { path: 'nested/large.bin', size: 768, parents: true });
+  assert.ok(begin.ok, JSON.stringify(begin));
+  const transferId = begin.result.transferId;
+  for (let sequence = 0; sequence < 3; sequence++) {
+    const chunk = await call('writeChunk', { transferId, sequence, base64 });
+    assert.ok(chunk.ok, JSON.stringify(chunk));
+    if (sequence === 0) {
+      const again = await call('writeChunk', { transferId, sequence: 0, base64 });
+      assert.equal(again.result.bytesReceived, 256, 'duplicate chunk appended twice');
+    }
+  }
+  const all = Buffer.concat([ALL_BYTES, ALL_BYTES, ALL_BYTES]);
+  const commit = await call('commitWrite', { transferId, path: 'nested/large.bin', sha256: sha256(all) });
+  assert.ok(commit.ok && commit.result.written, JSON.stringify(commit));
+
+  const open = await call('openRead', { path: 'nested/large.bin' });
+  assert.ok(open.ok, JSON.stringify(open));
+  let offset = 0;
+  let piece;
+  while (offset < 768) {
+    piece = await call('readChunk', { transferId: open.result.transferId, offset, count: 200 });
+    assert.ok(piece.ok, JSON.stringify(piece));
+    offset = piece.result.nextOffset;
+  }
+  assert.ok(piece.result.complete && piece.result.sha256 === sha256(all), 'download hash');
+
+  const copy = await call('copyDirectory', { path: 'nested', to: 'copied', parents: true });
+  assert.ok(copy.ok, JSON.stringify(copy));
+  assert.equal(sha256(fs.readFileSync(path.join(root, 'copied', 'large.bin'))), sha256(all));
+}
+
+async function checkJobs(call) {
+  const job = (command, fields = {}) => call('startJob', { command, waitMs: 3000, timeoutMs: 5000, cwd: '', ...fields });
+  const output = await job('[Console]::Write(("x"*5000));[Console]::Error.Write(("e"*4000));exit 7');
+  const result = output.result;
+  assert.ok(output.ok && result.state === 'completed' && result.exitCode === 7, JSON.stringify(output));
+  assert.ok(result.stdout.length === 1024 && result.stdoutTruncated && result.stderrTruncated, 'output limits');
+  const native = await job('cmd.exe /d /c exit 7');
+  assert.equal(native.result.exitCode, 7, 'native exit code');
+  const failed = await job('throw "controlled"');
+  assert.ok(failed.result.exitCode === 1 && /controlled/u.test(failed.result.stderr), 'PowerShell failure');
+  const input = await job('if($null -eq [Console]::ReadLine()){Write-Output "STDIN_EOF"}else{throw "unexpected input"}');
+  assert.match(input.result.stdout, /STDIN_EOF/u, 'child inherited input');
+
+  const slow = await job('Start-Sleep -Seconds 30', { waitMs: 0, timeoutMs: 1000 });
+  await new Promise(resolve => setTimeout(resolve, 1300));
+  const poll = await call('pollJob', { jobId: slow.result.jobId, waitMs: 3000, stdoutOffset: 0, stderrOffset: 0 });
+  assert.equal(poll.result.state, 'timed_out');
+  const cancel = await job('Start-Sleep -Seconds 30', { waitMs: 0, timeoutMs: 10000 });
+  const stopped = await call('cancelJob', { jobId: cancel.result.jobId });
+  assert.equal(stopped.result.state, 'cancelled');
+}
+
+test('Windows Host helper preserves bytes, verifies chunked transfers, executes bounded jobs and rejects escapes', { skip: SKIP, timeout: 120000 }, async t => {
+  const root = makeRoot(t, 'lswb runtime ');
+  const { server, call } = await startHelper(t, root);
+  await checkBytes(call, root);
+  await checkTransfers(call, root);
+  await checkJobs(call);
+  const stop = await call('shutdown');
+  assert.equal(stop.result.stopping, true);
+  assert.equal(await server.exited, 0, server.state.stdout + server.state.stderr);
 });

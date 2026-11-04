@@ -58,7 +58,7 @@ function fixture(initial = {}, settings = {}, services = {}) {
   };
   const api = createWorkspaceApi(vscode, { id: 'test-instance', epoch: () => 3, version: '0.2.0' }, services);
   const send = r => api.dispatch({ workspace: 'vsls:/', epoch: 3, ...r });
-  return { send, docs, disk, calls, saveBehavior, vscode, setApplyFalse: () => applyFalse = true };
+  return { api, send, docs, disk, calls, saveBehavior, vscode, setApplyFalse: () => applyFalse = true };
 }
 test('read returns current buffered content and version without provider reread or default hash', async () => {
   const f = fixture({ 'a.txt': 'one\n中文😀\n' });
@@ -108,7 +108,7 @@ test('root mutations, stale workspace epoch and instance mismatches fail before 
   assert.equal(f.calls.open, 0); assert.equal(f.calls.delete, 0);
 });
 test('dirty copy targets and unsupported recursive deletes do not trigger IO', async () => {
-  const f = fixture({ source: 'a', target: 'b' }, { 'terminal.enabled': true }); f.docs.get('vsls:/target').isDirty = true;
+  const f = fixture({ source: 'a', target: 'b' }, { 'host.enabled': true }); f.docs.get('vsls:/target').isDirty = true;
   await assert.rejects(f.send({ op: 'copy', path: 'source', to: 'target', overwrite: true }), { code: 'dirty_document' });
   await assert.rejects(f.send({ op: 'delete', path: 'folder', recursive: true }), { code: 'not_supported' });
   assert.equal(f.calls.copy, 0); assert.equal(f.calls.delete, 0);
@@ -136,12 +136,12 @@ test('master and read permissions prevent all file IO, and disabled saves preven
  await assert.rejects(f.send({op:'edit',files:[{path:'a',changes:[{oldText:'value',newText:'new'}]}]}),{code:'operation_disabled'});assert.equal(f.calls.apply,0);
 });
 test('Host-backed search never silently falls back to editor commands when the shared terminal is missing',async()=>{
- const f=fixture({a:'value'},{'terminal.enabled':true});f.vscode.window={terminals:[]};
+ const f=fixture({a:'value'},{'host.enabled':true});f.vscode.window={terminals:[]};
  await assert.rejects(f.send({op:'search',query:'value'}),{code:'host_terminal_required'});assert.equal(f.calls.commands.length,0);assert.equal(f.calls.open,0);
 });
 test('a document version bump alone cannot clear a stale Host edit; no active-editor revert is executed',async()=>{
  let f;const host={request:async(root,op,action)=>{assert.deepEqual(action.inspectTextPaths,['a']);f.docs.get('vsls:/a').version++;return{applied:true,textStates:{a:require('../core.cjs').textHash('new')}};},dispose(){},changed(){}};
- f=fixture({a:'old'},{'terminal.enabled':true},{host});
+ f=fixture({a:'old'},{'host.enabled':true},{host});
  await f.send({op:'applyPatch',patch:'--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+new\n'});
  await assert.rejects(f.send({op:'read',path:'a'}),{code:'editor_refresh_pending'});assert.equal(f.calls.commands.length,0);assert.equal(f.calls.providerReads,0);
  f.docs.get('vsls:/a').text='new';f.docs.get('vsls:/a').version++;
@@ -152,4 +152,22 @@ test('language renaming checks every target, applies once, and saves only those 
  f.vscode.commands.executeCommand=async()=>({entries:()=>[[new f.vscode.Uri('vsls:/a'),[{range:new f.vscode.Range(0,6,0,13),newText:'newName'}]],[new f.vscode.Uri('vsls:/b'),[{range:new f.vscode.Range(0,4,0,11),newText:'newName'}]]]});
  const result=await f.send({op:'renameSymbol',path:'a',line:1,character:7,newName:'newName'});
  assert.equal(result.saved,true);assert.equal(f.calls.apply,1);assert.deepEqual(f.calls.save,['vsls:/a','vsls:/b']);assert.equal(f.docs.get('vsls:/user').isDirty,true);assert.equal(f.disk.get('vsls:/b'),'use(newName);');
+});
+
+test('renamed Host settings invalidate the binding; portForward tuning keys do not', () => {
+  const changes = [];
+  const host = { changed: invalidate => changes.push(invalidate), dispose() {} };
+  const f = fixture({}, {}, { host });
+  const event = key => ({ affectsConfiguration: section => key.startsWith(section) });
+  const invalidates = key => {
+    changes.length = 0;
+    f.api.configurationChanged(event('liveshareWorkspaceBridge.' + key));
+    return changes[0];
+  };
+  for (const key of ['host.enabled', 'host.terminalName', 'host.workspacePath', 'host.commandTimeoutMs', 'host.maxOutputCharacters', 'terminal.enabled', 'transfer.chunkBytes']) {
+    assert.equal(invalidates(key), true, key);
+  }
+  for (const key of ['host.guestPort', 'host.idleTimeoutMinutes', 'host.handshakeTimeoutMinutes']) {
+    assert.equal(invalidates(key), false, key);
+  }
 });
