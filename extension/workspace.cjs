@@ -69,8 +69,40 @@ function createWorkspaceApi(vscode, identity, services = {}) {
     };
     finish.paths = observed.map(x => x.relative); return finish;
   }
-  async function document(uri) {
-    const doc = await vscode.workspace.openTextDocument(uri);
+  function isFileNotFound(error) {
+    if (!error) {
+      return false;
+    }
+    if (error.code === 'FileNotFound' || error.code === 'EntryNotFound') {
+      return true;
+    }
+    return typeof error.name === 'string' && /^(?:EntryNotFound|FileNotFound)\b/u.test(error.name);
+  }
+  // VS Code rejects openTextDocument for a missing file with a plain Error, so
+  // only after a failed read open is the provider asked whether the file exists.
+  async function missingFile(uri, openError) {
+    if (isFileNotFound(openError)) {
+      return true;
+    }
+    try {
+      await vscode.workspace.fs.stat(uri);
+      return false;
+    } catch (statError) {
+      return isFileNotFound(statError);
+    }
+  }
+  async function openDocument(uri, classifyMissing) {
+    try {
+      return await vscode.workspace.openTextDocument(uri);
+    } catch (error) {
+      if (classifyMissing && await missingFile(uri, error)) {
+        fail('not_found', 'The file does not exist in the selected workspace.');
+      }
+      throw error;
+    }
+  }
+  async function document(uri, classifyMissing = false) {
+    const doc = await openDocument(uri, classifyMissing);
     const previous = externallyChanged.get(uri.toString());
     if (previous !== undefined) {
       const matches = () => previous.expectedHash && normalizedTextHash(doc.getText()) === previous.expectedHash;
@@ -90,7 +122,7 @@ function createWorkspaceApi(vscode, identity, services = {}) {
   const hostOperations = createHostOperations({ vscode, host, permissions, resolve, rejectDirty, noteExternalChange });
   async function read(r) {
     const { uri } = resolve(r);
-    const doc = await document(uri);
+    const doc = await document(uri, true);
     const start = integer(r.startLine ?? 1, 'startLine', 1, doc.lineCount);
     const end = integer(r.endLine ?? doc.lineCount, 'endLine', start, doc.lineCount);
     const text = doc.getText(new vscode.Range(start - 1, 0, end - 1, doc.lineAt(end - 1).text.length));

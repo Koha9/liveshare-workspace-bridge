@@ -2,6 +2,7 @@
 
 **English** | [简体中文](CHANGELOG.zh-CN.md) | [繁體中文](CHANGELOG.zh-TW.md) | [日本語](CHANGELOG.ja.md)
 
+- 0.3.0-pre — read and readMany report a file that does not exist as `not_found` instead of the generic `vscode_error`; in readMany only that entry fails and the other files are still returned.
 - 0.3.0-pre — Discovery records left by a reloaded or crashed window no longer make discovery `partial`: a missing pipe whose owner process has exited is reported as a `stale` probe with `ownerProcess: "exited"` and counted in `staleRecordCount`; if only such records remain, the status is `no_records`. On activation the extension removes those records (matching name, id, pid and pipe name; links and other files are left alone).
 - 0.3.0-pre — Removed the allLocalUsers IPC access mode; only ownerOnly and selectedUsers remain. A stored allLocalUsers value runs as ownerOnly, shows one notice per window session, and is not rewritten. info and lswb_status add ipc.requestedMode and ipc.deprecatedModeIgnored. See [IPC access](IPC-SECURITY.md).
 - 0.3.0-pre — Removed the Codex skill; agents connect through the MCP server. The CLI keeps instances/diagnose/raw requests for troubleshooting.

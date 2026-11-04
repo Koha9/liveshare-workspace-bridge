@@ -52,7 +52,7 @@ Status sends no command and answers immediately. Binding writes an owned tempora
 {"op":"format","path":"src/a.ts","tabSize":2,"insertSpaces":true}
 ```
 
-Reads return buffered text/version/dirty/EOL/lineCount. Lines are 1-based and inclusive. withHash:true adds a document text hash, not raw Host bytes. Single text return limit is 1 MiB; opening can still access a complete provider resource.
+Reads return buffered text/version/dirty/EOL/lineCount. Lines are 1-based and inclusive. withHash:true adds a document text hash, not raw Host bytes. Single text return limit is 1 MiB; opening can still access a complete provider resource. A read of a file that does not exist fails with `not_found` (in readMany, only that entry); other open failures keep their original code.
 
 edit.files allows 100 distinct targets, 1000 changes/file. oldText must be unique unless all:true. All positions reference original content, without overlap. Line edits use startLine/endLine/newText/expectedText?, selecting lines without the last separator. Native range fields use 0-based lines and UTF-16 characters, end-exclusive, with version/hash/expectedText protection. Full write requires expectedVersion or expectedHash.
 
