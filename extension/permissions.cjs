@@ -371,7 +371,7 @@ function configurationProperties() {
       default: 'ownerOnly',
       scope: 'machine',
       order: 9,
-      markdownDescription: '**IPC Access Mode** — Trust applies to every process under allowed accounts, not only Codex. Calls use bridge permissions outside Codex filesystem sandbox limits. Host access is independent; when enabled it may allow Host commands. Changes restart the bridge; rediscover afterward. Use Configure IPC Access to choose users. The former allLocalUsers value was removed in 0.3.0; a stored value runs as ownerOnly and is not rewritten.',
+      markdownDescription: '**IPC Access Mode** — Trust applies to every process under allowed accounts, not only the agent. Calls use bridge permissions, outside any agent filesystem sandbox. Host access is independent; when enabled it may allow Host commands. Changes restart the bridge; rediscover afterward. Use Configure IPC Access to choose users. The former allLocalUsers value was removed in 0.3.0; a stored value runs as ownerOnly and is not rewritten.',
     },
     [`${NAMESPACE}.ipc.selectedUserSids`]: {
       type: 'array',
