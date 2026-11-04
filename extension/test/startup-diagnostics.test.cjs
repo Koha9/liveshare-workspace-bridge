@@ -31,3 +31,47 @@ test('readMany partial failure keeps successful items and is not converted into 
 test('producer retention bounds owned snapshots and account-enumeration failure retains the correct role',t=>{const f=fixture(t);for(let pid=1000;pid<1020;pid++){const j=createStartupJournal({directory:f.directory,pid,version:'0.2.3'});j.begin(id,1,'powershell.exe');}assert.ok(fs.readdirSync(f.directory).filter(x=>x.endsWith('.json')).length<=16);f.journal.begin(id,1,'powershell.exe');f.journal.setupError({code:'execution_policy_related_startup_block',stage:'account_enumeration'});const snapshot=f.journal.snapshot();assert.equal(snapshot.origin.component,'guest_local_account_enumeration_helper');assert.equal(snapshot.current.stage,'account_enumeration');assert.equal(snapshot.events[0].confidence,'high');});
 test('history does not merge different requested shells or backfill old failures with a new shell',t=>{const f=fixture(t);f.journal.begin(id,1,'powershell.exe');f.journal.stderr('about_Execution_Policies UnauthorizedAccess',false);f.journal.begin('00000000-0000-4000-8000-000000000002',2,'pwsh.exe');f.journal.stderr('about_Execution_Policies UnauthorizedAccess',false);const state=f.journal.snapshot();assert.equal(state.events.length,2);assert.equal(state.events[0].requestedExecutableName,'powershell.exe');assert.equal(state.events[1].requestedExecutableName,'pwsh.exe');assert.equal(state.events[0].historical,true);});
 test('atomic snapshot writes do not overwrite a pre-existing predictable temporary filename',t=>{const f=fixture(t);const sentinel=path.join(f.directory,'123.json.tmp');fs.writeFileSync(sentinel,'do not overwrite');f.journal.begin(id,1,'powershell.exe');assert.equal(fs.readFileSync(sentinel,'utf8'),'do not overwrite');assert.ok(fs.existsSync(path.join(f.directory,'123.json')));});
+
+function startupRecordWithVersion(extensionVersion) {
+  return {
+    producer: 'lswb-startup-v1',
+    schemaVersion: 1,
+    pid: 123,
+    extensionVersion,
+    observedAt: new Date().toISOString(),
+    current: {},
+    shell: {},
+    events: [],
+  };
+}
+
+function projectedExtensionVersion(extensionVersion) {
+  return projectStartupRecord(startupRecordWithVersion(extensionVersion)).extensionVersion;
+}
+
+test('extension version projection accepts semver prerelease suffixes', () => {
+  const accepted = ['0.2.4', '0.3.0', '0.3.0-pre', '0.3.0-pre.1', '1.0.0-rc-2.x'];
+  for (const version of accepted) {
+    assert.equal(projectedExtensionVersion(version), version, version);
+  }
+});
+
+test('extension version projection rejects malformed versions as unknown', () => {
+  const rejected = [
+    '0.3.0-', '0.3.0-.', '0.3.0-pre..1', '0.3.0-pre.', '0.3.0+build',
+    '0.3.0-pre space', 'v0.3.0', '0.3', '0.3.0-pre\n', 3, null, undefined,
+  ];
+  for (const version of rejected) {
+    assert.equal(projectedExtensionVersion(version), 'unknown', String(version));
+  }
+});
+
+test('startup journal reports the packaged extension version', t => {
+  const { version } = require('../package.json');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lswb-startup-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const journal = createStartupJournal({ directory, pid: 456, version, log: () => {} });
+  journal.begin(id, 1, 'powershell.exe');
+  const record = readStartupDiagnostics({ directory }).records[0];
+  assert.equal(record.extensionVersion, version);
+});

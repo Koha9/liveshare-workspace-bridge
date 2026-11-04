@@ -15,11 +15,24 @@ const oneOf=(value,values,fallback='unknown')=>values.includes(value)?value:fall
 const safeVersion=value=>typeof value==='string'&&/^\d{1,4}(?:\.\d{1,8}){1,4}$/u.test(value)?value:'unknown';
 const safeTime=value=>typeof value==='string'&&Number.isFinite(Date.parse(value))?new Date(value).toISOString():null;
 const safeAttempt=value=>typeof value==='string'&&/^[a-f0-9-]{36}$/u.test(value)?value:null;
+// Core semver with an optional prerelease suffix of dot-separated non-empty identifiers.
+const EXTENSION_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/u;
+
+function safeExtensionVersion(value) {
+  if (typeof value !== 'string') {
+    return 'unknown';
+  }
+  if (!EXTENSION_VERSION_PATTERN.test(value)) {
+    return 'unknown';
+  }
+  return value;
+}
+
 function projectStartupRecord(value) {
   if(!value||value.producer!=='lswb-startup-v1'||value.schemaVersion!==1||!Number.isSafeInteger(value.pid)||value.pid<1||!safeTime(value.observedAt))return null;
   const current=value.current||{},shell=value.shell||{};
   const events=(Array.isArray(value.events)?value.events:[]).slice(-8).map(e=>({code:oneOf(e.code,STARTUP_CODES,'helper_stderr_observed'),stage:oneOf(e.stage,STARTUP_STAGES),requestedExecutableName:oneOf(e.requestedExecutableName,['powershell.exe','pwsh.exe','other']),confidence:oneOf(e.confidence,['high','low','unknown']),firstSeen:safeTime(e.firstSeen),lastSeen:safeTime(e.lastSeen),attemptId:safeAttempt(e.attemptId),firstAttemptId:safeAttempt(e.firstAttemptId),count:Number.isSafeInteger(e.count)?Math.min(1000,Math.max(1,e.count)):1,historical:e.historical===true,encodingReplacementObserved:e.encodingReplacementObserved===true}));
-  return {producer:'lswb-startup-v1',schemaVersion:1,pid:value.pid,extensionVersion:typeof value.extensionVersion==='string'&&/^\d+\.\d+\.\d+$/u.test(value.extensionVersion)?value.extensionVersion:'unknown',observedAt:safeTime(value.observedAt),origin:{component:current.stage==='account_enumeration'?'guest_local_account_enumeration_helper':current.stage==='access_setup'?'guest_local_bridge_access_setup':'guest_local_ipc_helper',side:'guest',location:'local'},current:{health:oneOf(current.health,['starting','failed','ready','stopped']),stage:oneOf(current.stage,STARTUP_STAGES),attemptId:typeof current.attemptId==='string'&&/^[a-f0-9-]{36}$/u.test(current.attemptId)?current.attemptId:null,epoch:Number.isSafeInteger(current.epoch)&&current.epoch>=0?current.epoch:null},shell:{requestedExecutableName:oneOf(shell.requestedExecutableName,['powershell.exe','pwsh.exe','other']),actualExecutableName:oneOf(shell.actualExecutableName,['powershell.exe','pwsh.exe']),version:safeVersion(shell.version),edition:oneOf(shell.edition,['Desktop','Core']),effectiveExecutionPolicy:oneOf(shell.effectiveExecutionPolicy,POLICY_VALUES),policyScopes:Object.fromEntries(['MachinePolicy','UserPolicy','Process','CurrentUser','LocalMachine'].map(k=>[k,oneOf(shell.policyScopes?.[k],POLICY_VALUES)])),metadataSource:oneOf(shell.metadataSource,['requested_only','helper_ready']),actualIdentity:'unknown',externalProbeIdentity:'unknown',identityComparison:'unknown'},events};
+  return {producer:'lswb-startup-v1',schemaVersion:1,pid:value.pid,extensionVersion:safeExtensionVersion(value.extensionVersion),observedAt:safeTime(value.observedAt),origin:{component:current.stage==='account_enumeration'?'guest_local_account_enumeration_helper':current.stage==='access_setup'?'guest_local_bridge_access_setup':'guest_local_ipc_helper',side:'guest',location:'local'},current:{health:oneOf(current.health,['starting','failed','ready','stopped']),stage:oneOf(current.stage,STARTUP_STAGES),attemptId:typeof current.attemptId==='string'&&/^[a-f0-9-]{36}$/u.test(current.attemptId)?current.attemptId:null,epoch:Number.isSafeInteger(current.epoch)&&current.epoch>=0?current.epoch:null},shell:{requestedExecutableName:oneOf(shell.requestedExecutableName,['powershell.exe','pwsh.exe','other']),actualExecutableName:oneOf(shell.actualExecutableName,['powershell.exe','pwsh.exe']),version:safeVersion(shell.version),edition:oneOf(shell.edition,['Desktop','Core']),effectiveExecutionPolicy:oneOf(shell.effectiveExecutionPolicy,POLICY_VALUES),policyScopes:Object.fromEntries(['MachinePolicy','UserPolicy','Process','CurrentUser','LocalMachine'].map(k=>[k,oneOf(shell.policyScopes?.[k],POLICY_VALUES)])),metadataSource:oneOf(shell.metadataSource,['requested_only','helper_ready']),actualIdentity:'unknown',externalProbeIdentity:'unknown',identityComparison:'unknown'},events};
 }
 function readStartupDiagnostics(options={}) {
   const disk=options.fsImpl||fs,directory=options.directory||path.join(path.dirname(registry),'startup-diagnostics');
