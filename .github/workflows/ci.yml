@@ -26,7 +26,7 @@ jobs:
         run: npm ci --prefix extension
       - run: npm test
       - run: npm run check
-      - name: Validate source layout and synchronized skill client
+      - name: Validate source layout and versions
         shell: pwsh
         run: '& "${{ steps.python.outputs.python-path }}" scripts/build.py --check'
       - name: Validate Marketplace assets and reader links

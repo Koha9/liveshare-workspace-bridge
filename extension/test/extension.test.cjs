@@ -14,10 +14,16 @@ test('extension starts before joining, refreshes workspace epoch, restarts and r
   let changeFolders, changeConfiguration;
   const settings = {};
   const bridgeOutput = [];
+  const notices = [];
   class Uri { constructor(value) { this.value = value; this.scheme = 'vsls'; this.authority = ''; this.path = '/'; } toString() { return this.value; } }
   const vscode = {
     Uri,
-    window: { createOutputChannel: name => { assert.equal(name, manifest.displayName); return { append: text => bridgeOutput.push(text), appendLine: text => bridgeOutput.push(text + "\n"), dispose() {} }; } },
+    window: { createOutputChannel: name => { assert.equal(name, manifest.displayName); return { append: text => bridgeOutput.push(text), appendLine: text => bridgeOutput.push(text + "\n"), dispose() {} }; },
+      showInformationMessage: async message => {
+        notices.push(message);
+        return undefined;
+      },
+    },
     workspace: { workspaceFolders: [], textDocuments: [], isTrusted: true, getConfiguration: section => ({ get: key => { assert.ok(Object.hasOwn(manifest.contributes.configuration.properties, `${section}.${key}`)); assert.equal(section, 'liveshareWorkspaceBridge'); return key === 'powershell' ? '' : settings[key]; } }), onDidChangeWorkspaceFolders: callback => { changeFolders = callback; return { dispose() {} }; }, onDidChangeConfiguration: callback => { changeConfiguration = callback; return { dispose() {} }; } },
     commands: { registerCommand: (name, callback) => { assert.equal(commands.has(name), false); commands.set(name, callback); return { dispose() { commands.delete(name); } }; } }
   };
@@ -67,6 +73,24 @@ test('extension starts before joining, refreshes workspace epoch, restarts and r
   const revoked = await ownRecord(trusted.id);
   assert.equal(revoked.epoch, 5); assert.equal(revoked.ipc.mode, 'ownerOnly');
   assert.equal(records().some(x=>x.id===trusted.id), false);
+  settings['ipc.accessMode'] = 'allLocalUsers';
+  changeConfiguration({ affectsConfiguration: key => key === 'liveshareWorkspaceBridge.ipc.accessMode' });
+  const removed = await ownRecord(revoked.id);
+  assert.equal(removed.epoch, 6);
+  assert.equal(removed.ipc.mode, 'ownerOnly');
+  assert.equal(removed.ipc.requestedMode, 'allLocalUsers');
+  assert.equal(removed.ipc.deprecatedModeIgnored, true);
+  const removedInfo = (await request(removed, { op: 'info', instance: removed.id })).result.ipc;
+  assert.equal(removedInfo.mode, 'ownerOnly');
+  assert.equal(removedInfo.requestedMode, 'allLocalUsers');
+  assert.equal(removedInfo.deprecatedModeIgnored, true);
+  assert.equal(notices.length, 1);
+  assert.match(notices[0], /'allLocalUsers' was removed in 0\.3\.0/);
+  commands.get('liveshareWorkspaceBridge.restart')();
+  const removedAgain = await ownRecord(removed.id);
+  assert.equal(removedAgain.ipc.mode, 'ownerOnly');
+  assert.equal(notices.length, 1);
+  assert.equal(settings['ipc.accessMode'], 'allLocalUsers');
   for (const disposable of context.subscriptions.slice().reverse()) disposable.dispose();
   context.subscriptions.length = 0;
   assert.equal(records().some(x => x.id === revoked.id), false);

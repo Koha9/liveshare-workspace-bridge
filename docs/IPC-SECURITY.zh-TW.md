@@ -8,10 +8,9 @@
 | 模式 | 橋接擁有者以外的範圍 |
 |---|---|
 | ownerOnly | 無，發佈預設。 |
-| allLocalUsers | 目前本機 SAM 使用者，含可能仍有處理程序的停用帳戶；不是 Everyone、群組或全部網域使用者。 |
 | selectedUsers | 精確匹配 ipc.selectedUserSids 的現有本機使用者。 |
 
-擁有者即使是網域使用者也保留，額外授權僅本機。拒絕遠端，客戶端與橋接須相同 Windows session ID。網域控制站拒絕額外列舉。全部本機帳戶於啟動刷新，不建立或監控帳戶。
+擁有者即使是網域使用者也保留，額外授權僅本機。拒絕遠端，客戶端與橋接須相同 Windows session ID。網域控制站拒絕額外列舉。0.3.0 已移除 allLocalUsers；已保存的該值按 ownerOnly 執行，不改寫設定。
 
 信任帳戶下全部處理程序，不限 Codex 單一工作；呼叫超出 Codex 檔案系統沙箱，仍受 agent／操作權限約束。Host 獨立，已開啟且條件成立時可能執行 Host 命令。選擇器擴權前警告，禁止自動選更廣模式。
 
@@ -19,7 +18,7 @@
 
 ## 相容遷移
 
-新模式無明確 User 值且舊 ipc.allowCodexSandboxClients=true，首次只解析既有 CodexSandboxOffline／Online，快取 SID 並保存 ipc.selectedUserSids／selectedUsers，不選 allLocalUsers。固定後不依名稱重解，缺少帳戶不增加授權。首次快照前刪除重建的歷史 SID 無法由布林還原，不確定時先核對。
+新模式無明確 User 值且舊 ipc.allowCodexSandboxClients=true，首次只解析既有 CodexSandboxOffline／Online，快取 SID 並保存 ipc.selectedUserSids／selectedUsers。固定後不依名稱重解，缺少帳戶不增加授權。首次快照前刪除重建的歷史 SID 無法由布林還原，不確定時先核對。
 
 明確新模式優先，舊 false／未設定維持 ownerOnly。不覆寫模糊手選或已觀察到的同時變更。舊布林保留，但明確模式後新版忽略；舊視窗須更新／重新載入才適用新模式。
 

@@ -1,4 +1,4 @@
-# Package the VSIX and companion skill with the standard-library builder.
+# Package the VSIX with the standard-library builder.
 # Set LSWB_PYTHON to an exact Python 3 executable path to override detection.
 $ErrorActionPreference = 'Stop'
 $pythonExe = $env:LSWB_PYTHON

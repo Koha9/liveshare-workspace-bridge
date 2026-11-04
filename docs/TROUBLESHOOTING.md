@@ -20,7 +20,7 @@ If still disconnected, run diagnose once. For task-authorized recovery the agent
 
 ## Missing or unresponsive Host terminal
 
-Host features require one connected shared Windows PowerShell terminal with read/write access. Ordinary Guest terminals are excluded. If absent, the skill asks the user once for Host setup and waits. Multiple candidates need the exact configured name. No repeated prompts, guessed terminals, or alternate execution routes.
+Host features require one connected shared Windows PowerShell terminal with read/write access. Ordinary Guest terminals are excluded. If absent, the agent asks the user once for Host setup and waits. Multiple candidates need the exact configured name. No repeated prompts, guessed terminals, or alternate execution routes.
 
 Binding verifies the shared root using an owned temporary bootstrap file. A sent request that times out quarantines the channel; do not replay mutations. Preserve the receipt, inspect affected targets, and wait until the user confirms the terminal is idle or restarted before explicit acknowledgeRecovery binding. Timeout details contain counters, not captured file contents.
 
@@ -38,4 +38,4 @@ Host rg searches saved files; complete is false on limits/failures, and no-match
 
 Byte overwrite needs the current raw Host SHA-256. Directory copy requires a new destination and can partially fail. Recursive deletion and cross-file atomic saves are not implemented. For response_limit, request relevant ranges/fewer results. Provider partial text responses do not establish streaming reads.
 
-Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable`. Ask the user for an accessible copy and local path; do not bypass the limit with repeated byte reads or raw commands. Small byte reads and large uploads remain available.
+Large downloads (`transferOpenRead`/`transferRead`) return `feature_unavailable`. Ask the user for an accessible copy and local path; do not bypass the limit with repeated byte reads or raw commands. Small byte reads and large uploads remain available.

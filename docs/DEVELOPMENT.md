@@ -6,14 +6,13 @@ Windows, Node.js and confirmed Python 3 are required. Runtime uses built-in modu
 
 ```text
 extension/                         Runtime, CLI and tests
-skills/liveshare-workspace-bridge/  Skill and self-contained client
 scripts/build.py                   Packaging and source checks
 docs/                              Current product/contributor guides
 dist/                              Ignored generated packages
 .local/                            Ignored local working files
 ```
 
-extension/cli.cjs is canonical; build synchronizes its skill copy. Keep source and skill versions, API fields and translations aligned. Skill instructions/references remain English-only.
+The MCP server (extension/mcp-server.cjs and mcp-tools.cjs) is the only agent interface. extension/cli.cjs is a troubleshooting CLI and the local transport library the MCP server uses; keep the exports mcp-tools.cjs relies on. Keep versions, API fields and translations aligned.
 
 ```powershell
 npm test
@@ -24,11 +23,11 @@ $pythonExe = '<path-to-python.exe>'
 & $pythonExe .\scripts\build.py --verify
 ```
 
-Packaging shortcuts at the repository root: `./build.ps1` or `build.bat` on Windows; `sh ./build.sh` on Unix or Git Bash. With no arguments they build and verify the VSIX, skill ZIP and SHA-256 files in `dist/`; `--check`, `--verify` and `--help` are forwarded to `scripts/build.py`. Set `LSWB_PYTHON` to a full Python 3 executable path when needed. Windows detects active Conda, user Anaconda or the Python Launcher; Unix uses active Conda or Python 3. These entrypoints also work from another current directory.
+Packaging shortcuts at the repository root: `./build.ps1` or `build.bat` on Windows; `sh ./build.sh` on Unix or Git Bash. With no arguments they build and verify the VSIX and its SHA-256 file in `dist/`; `--check`, `--verify` and `--help` are forwarded to `scripts/build.py`. Set `LSWB_PYTHON` to a full Python 3 executable path when needed. Windows detects active Conda, user Anaconda or the Python Launcher; Unix uses active Conda or Python 3. These entrypoints also work from another current directory.
 
 Normal tests cover document/save/permission/IPC contracts without changing a connected project. A passing local suite is not proof that every Host, account, policy, remote session or language provider works.
 
-The build creates VSIX/skill ZIP and SHA-256 files. --check validates layout/version/client sync; --verify compares current packages to exact source members. The explicit reader whitelist excludes historical acceptance documents, issues, .local and private memo.
+The build creates the VSIX and its SHA-256 file. --check validates layout and versions; --verify compares current packages to exact source members. The explicit reader whitelist excludes historical acceptance documents, issues, .local and private memo.
 
 Live tests require explicit scope, unique owned fixtures and cleanup. extension/test/live-v01.cjs requires LIVESHARE_RUN_LIVE=1 and changes the Search View. live-sandbox.cjs uses existing local accounts, can initialize ACLs in its owned temporary workspace and sends no Host commands. These scripts are not normal CI tests.
 

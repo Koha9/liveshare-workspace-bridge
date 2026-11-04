@@ -14,7 +14,7 @@
 - mcp-tools.cjs defines the MCP tool table. It maps Guest, Host and local-file tools onto bridge operations through the cli.cjs transport and keeps the root-uri-to-instance/epoch bindings. Unknown transport outcomes are reported, never replayed.
 - mcp-launcher.cjs is a self-contained launcher that the extension installs to `~/.liveshare-local/mcp-server.cjs` (via mcp-launcher-install.cjs, which also renders the Copy MCP Server Configuration snippets). It starts mcp-server.cjs from a live discovery record (newest server file first, then newest record), so agent configurations survive upgrades.
 - mcp-definition-provider.cjs registers mcp-server.cjs with VS Code (`vscode.lm.registerMcpServerDefinitionProvider`) so that the built-in agent discovers it.
-- cli.cjs is canonical and copied into the skill at build time; it supports JSON, patches and chunked uploads. Its retained download entry point is denied by the server capability gate in this release.
+- cli.cjs is a troubleshooting CLI for people (instances, diagnose, pinned raw JSON requests) and the local transport library that mcp-tools.cjs uses for discovery, requests and chunked uploads. Agents do not call it directly.
 
 The document path remains the default for text edits, without provider rereads after every save. The optional Host path handles complete saved-file search, commands, patches and byte/directory operations. Raw Host execution requires all operation permissions; narrow actions remain individually controllable. These checks are not an OS sandbox for arbitrary scripts.
 
@@ -24,4 +24,4 @@ Dispatched work is not rolled back on revocation. Child tasks retain a bounded t
 
 `local-accounts.cs` enumerates only local SAM users and selects stable SIDs; `ipc-access.cjs` owns User-only mode resolution, one-time legacy SID migration and the English account picker.
 
-Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable`. Ask the user for an accessible copy and local path; do not bypass the limit with repeated byte reads or raw commands. Small byte reads and large uploads remain available.
+Large downloads (`transferOpenRead`/`transferRead`) return `feature_unavailable`. Ask the user for an accessible copy and local path; do not bypass the limit with repeated byte reads or raw commands. Small byte reads and large uploads remain available.

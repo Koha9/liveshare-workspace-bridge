@@ -1,9 +1,10 @@
 # Repository guidance
 
-This repository maintains the Windows VS Code extension and its Codex skill together.
+This repository maintains the Windows VS Code extension and its MCP server.
 
-- Runtime code lives in `extension/`; the skill is `skills/liveshare-workspace-bridge/`.
-- `extension/cli.cjs` is the canonical CLI. `scripts/build.py` synchronizes the self-contained copy in the skill. Do not maintain divergent clients.
+- Runtime code lives in `extension/`.
+- The MCP server (`extension/mcp-server.cjs` + `extension/mcp-tools.cjs`) is the only agent interface. Do not add a skill or another agent client.
+- `extension/cli.cjs` is a troubleshooting tool for people (`instances`, `diagnose`, pinned raw requests) and the transport library the MCP server uses. Keep the exports `mcp-tools.cjs` and `startup-diagnostics.cjs` require; do not add agent workflows to the CLI.
 - Preserve `vsls:` URI schemes and workspace/instance/epoch binding. Never route virtual paths through Node filesystem APIs.
 - Preserve the difference between apply success, per-document save results, and unknown transport outcomes. Do not automatically replay a sent mutation.
 - Normal edits save only their targets. Do not add default provider rereads, full-document hashes, saveAll, or directory scans as routine confirmation.

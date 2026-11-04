@@ -134,13 +134,13 @@ If the handshake fails or is cancelled, `lswb_host_status` shows `handshake.stat
 
 The Guest IPC helper forwards one request at a time. That is why `lswb_host_bind` returns before the Host acts instead of holding the connection for minutes.
 
-## MCP, the CLI and the skill
+## MCP and the CLI
 
-- The MCP server is the supported agent interface.
-- The Codex skill (`$liveshare-workspace-bridge`) is the legacy interface. MCP will replace it.
-- `cli.cjs` remains available for diagnostics. The MCP server reuses its local transport internally.
+- The MCP server is the only agent interface. The Codex skill was removed in 0.3.0.
+- `cli.cjs` is a troubleshooting tool for people. It keeps `instances`, `diagnose` and pinned raw JSON requests. Its upload, download and apply-patch commands were removed; use `lswb_upload_file` and `lswb_apply_patch_file`.
+- The MCP server reuses the `cli.cjs` local transport internally.
 
-All three talk to the same extension over the same local pipe and follow the same permissions.
+Both talk to the same extension over the same local pipe and follow the same permissions.
 
 ## Known limitations
 
