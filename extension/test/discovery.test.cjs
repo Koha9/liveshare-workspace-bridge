@@ -1,6 +1,6 @@
 'use strict';
 const {test}=require('node:test');const assert=require('node:assert/strict');
-const {discover,diagnosticReport,inspectRecords}=require('../cli.cjs');
+const {discover,diagnosticReport,inspectRecords,ownerProcessState}=require('../cli.cjs');
 const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002';
 function disk(entries){return{readdirSync(){return Object.keys(entries)},readFileSync(name){const value=entries[name.replaceAll('\\','/').split('/').at(-1)];if(value instanceof Error)throw value;return value}};}
 const record=id=>JSON.stringify({id,pipeName:'liveshare-local-123-'+id,epoch:1,version:'0.2.1'});
@@ -39,4 +39,65 @@ test('discovery probes at most four windows concurrently and retains registry or
   await new Promise(resolve=>setImmediate(resolve));active--;return connected(entry.id);
  }});
  assert.equal(maximum,4);assert.deepEqual(report.instances.map(x=>x.id),ids);assert.deepEqual(report.probes.map(x=>x.id),ids);
+});
+const {spawn}=require('node:child_process');
+const withPid=(id,pid)=>JSON.stringify({id,pipeName:`liveshare-local-${pid}-${id}`,pid,epoch:1,version:'0.3.0-pre'});
+const missingPipe=()=>Object.assign(new Error('gone'),{code:'transport_unavailable',transportCode:'ENOENT',requestSent:false});
+function exitedPid(){
+ return new Promise((resolve,reject)=>{
+  const child=spawn(process.execPath,['-e',''],{windowsHide:true});
+  child.on('error',reject);
+  child.on('exit',()=>resolve(child.pid));
+ });
+}
+test('owner process state distinguishes exited, alive, denied and invalid pids',async()=>{
+ const raise=code=>()=>{throw Object.assign(new Error(code),{code});};
+ assert.equal(ownerProcessState(4242,()=>true),'alive');
+ assert.equal(ownerProcessState(4242,raise('ESRCH')),'exited');
+ assert.equal(ownerProcessState(4242,raise('EPERM')),'alive');
+ assert.equal(ownerProcessState(4242,raise('EINVAL')),'unknown');
+ for(const pid of [undefined,0,-1,1.5,'4242',Number.MAX_SAFE_INTEGER+1])assert.equal(ownerProcessState(pid,()=>true),'unknown',String(pid));
+ assert.equal(ownerProcessState(process.pid),'alive');
+ assert.equal(ownerProcessState(await exitedPid()),'exited');
+});
+test('a missing pipe whose owner exited is stale but does not degrade discovery',async()=>{
+ const report=await discover({
+  fsImpl:disk({[a+'.json']:withPid(a,111),[b+'.json']:withPid(b,222)}),
+  processState:pid=>pid===222?'exited':'alive',
+  probe:async entry=>{if(entry.id===a)return connected(a);throw missingPipe();},
+ });
+ assert.equal(report.status,'ready');
+ assert.equal(report.recordCount,2);
+ assert.equal(report.staleRecordCount,1);
+ assert.equal(report.probes[1].status,'stale');
+ assert.equal(report.probes[1].ownerProcess,'exited');
+ assert.equal(diagnosticReport(report).probes[1].ownerProcess,'exited');
+});
+test('only exited-owner records report no_records, not a discovery failure',async()=>{
+ const report=await discover({
+  fsImpl:disk({[b+'.json']:withPid(b,222)}),
+  processState:()=>'exited',
+  probe:async()=>{throw missingPipe();},
+ });
+ assert.equal(report.status,'no_records');
+ assert.equal(report.staleRecordCount,1);
+ assert.equal(report.probes.length,1);
+});
+test('a missing pipe with a live, unknown or absent owner still degrades discovery',async()=>{
+ for(const state of ['alive','unknown']){
+  const report=await discover({
+   fsImpl:disk({[a+'.json']:withPid(a,111),[b+'.json']:withPid(b,222)}),
+   processState:pid=>pid===222?state:'alive',
+   probe:async entry=>{if(entry.id===a)return connected(a);throw missingPipe();},
+  });
+  assert.equal(report.status,'partial',state);
+  assert.equal(report.staleRecordCount,0,state);
+  assert.equal(report.probes[1].ownerProcess,undefined,state);
+ }
+ const unreachable=await discover({
+  fsImpl:disk({[a+'.json']:withPid(a,111),[b+'.json']:withPid(b,222)}),
+  processState:()=>'exited',
+  probe:async entry=>{if(entry.id===a)return connected(a);throw Object.assign(new Error(),{code:'transport_unavailable',transportCode:'ETIMEDOUT'});},
+ });
+ assert.equal(unreachable.status,'partial');
 });
