@@ -61,23 +61,21 @@ namespace LswbIpcV022 {
     public static AccountSelection Select(string mode,string[] selected,LocalAccount[] catalog) {
       List<LocalAccount> allowed=new List<LocalAccount>();List<SelectionIssue> issues=new List<SelectionIssue>();
       if(mode=="ownerOnly")return new AccountSelection{Allowed=allowed.ToArray(),Issues=issues.ToArray()};
-      if(mode!="selectedUsers"&&mode!="allLocalUsers")throw new ArgumentException("Unknown IPC access mode.");
+      // allLocalUsers was removed in 0.3.0; only explicit SID selections add grants.
+      if(mode!="selectedUsers")throw new ArgumentException("Unknown IPC access mode.");
       Dictionary<string,LocalAccount> users=new Dictionary<string,LocalAccount>(StringComparer.OrdinalIgnoreCase);string domain=null;
       foreach(LocalAccount account in catalog) {
         if(!IsUserSid(account.Sid))throw new ArgumentException("Catalog includes a non-user SID.");
         string actual=new SecurityIdentifier(account.Sid).AccountDomainSid.Value;
         if(domain!=null&&domain!=actual)throw new ArgumentException("Catalog contains multiple account authorities.");domain=actual;users[account.Sid]=account;
       }
-      if(mode=="allLocalUsers")allowed.AddRange(users.Values);
-      else {
-        if(selected==null||selected.Length>256)throw new ArgumentException("Select at most 256 local user SIDs.");
-        HashSet<string> seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach(string value in selected) {
-          if(!IsUserSid(value)){issues.Add(new SelectionIssue{Sid=value,Reason="invalidSid"});continue;}
-          string sid=new SecurityIdentifier(value).Value;if(!seen.Add(sid))continue;LocalAccount account;
-          if(users.TryGetValue(sid,out account))allowed.Add(account);
-          else issues.Add(new SelectionIssue{Sid=sid,Reason=domain!=null&&new SecurityIdentifier(sid).AccountDomainSid.Value==domain?"unavailableLocalUser":"notLocalAccount"});
-        }
+      if(selected==null||selected.Length>256)throw new ArgumentException("Select at most 256 local user SIDs.");
+      HashSet<string> seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+      foreach(string value in selected) {
+        if(!IsUserSid(value)){issues.Add(new SelectionIssue{Sid=value,Reason="invalidSid"});continue;}
+        string sid=new SecurityIdentifier(value).Value;if(!seen.Add(sid))continue;LocalAccount account;
+        if(users.TryGetValue(sid,out account))allowed.Add(account);
+        else issues.Add(new SelectionIssue{Sid=sid,Reason=domain!=null&&new SecurityIdentifier(sid).AccountDomainSid.Value==domain?"unavailableLocalUser":"notLocalAccount"});
       }
       return new AccountSelection{Allowed=allowed.ToArray(),Issues=issues.ToArray()};
     }

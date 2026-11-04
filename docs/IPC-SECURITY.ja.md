@@ -8,10 +8,9 @@
 | モード | 所有者以外の許可 |
 |---|---|
 | ownerOnly | なし。公開版既定。 |
-| allLocalUsers | 現在のローカル SAM ユーザー。無効アカウントの既存プロセスを含み得ます。Everyone、グループ、全ドメインユーザーではありません。 |
 | selectedUsers | ipc.selectedUserSids と一致する現ローカルユーザーのみ。 |
 
-所有者はドメインユーザーでも保持し、追加許可はローカルのみです。リモート拒否、同一 Windows session ID を要求します。DC での追加列挙は拒否し、全ローカル一覧は起動時更新です。アカウント作成／監視はしません。
+所有者はドメインユーザーでも保持し、追加許可はローカルのみです。リモート拒否、同一 Windows session ID を要求します。DC での追加列挙は拒否します。allLocalUsers は 0.3.0 で削除され、保存済みの値は ownerOnly として動作し、設定は書き換えません。
 
 許可アカウントの全プロセスを信頼し、Codex の一タスクではありません。呼出しは Codex ファイルシステム沙箱外で、agent／操作権限に従います。Host は独立し、有効で条件が合えば Host コマンドも可能です。範囲拡大前に警告し、自動的な広いモードへの切替はしません。
 
@@ -19,7 +18,7 @@
 
 ## 互換移行
 
-新モード未指定で旧 ipc.allowCodexSandboxClients=true なら、最初に既存 CodexSandboxOffline/Online のみ解決し SID をキャッシュ、ipc.selectedUserSids と selectedUsers を保存します。allLocalUsers にはしません。固定後は名前で再解決せず、不在は追加許可なしです。初回前に削除再作成された過去 SID は旧ブールで復元できず、不明なら確認します。
+新モード未指定で旧 ipc.allowCodexSandboxClients=true なら、最初に既存 CodexSandboxOffline/Online のみ解決し SID をキャッシュ、ipc.selectedUserSids と selectedUsers を保存します。固定後は名前で再解決せず、不在は追加許可なしです。初回前に削除再作成された過去 SID は旧ブールで復元できず、不明なら確認します。
 
 明示新モードが優先し、旧 false／未指定は ownerOnly。曖昧な手編集や観測した同時変更は上書きしません。旧ブールは残しますが明示モード後は無視します。旧版ウィンドウは更新／再読込まで旧規則です。
 

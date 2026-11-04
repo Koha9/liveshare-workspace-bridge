@@ -8,12 +8,22 @@ const readline = require('node:readline');
 const { spawn } = require('node:child_process');
 const { MAX_RESPONSE } = require('./core.cjs');
 const { createWorkspaceApi } = require('./workspace.cjs');
-const { ACCESS_KEYS, prepareAccess, listLocalUsers, configureAccess } = require('./ipc-access.cjs');
+const { MODES, ACCESS_KEYS, prepareAccess, listLocalUsers, configureAccess, noticeRemovedMode } = require('./ipc-access.cjs');
 const { createStartupJournal, captureStartupStderr } = require('./startup-diagnostics.cjs');
 const { installLauncher, launcherPath, renderMcpConfig } = require('./mcp-launcher-install.cjs');
 const { registerMcpDefinitionProvider } = require('./mcp-definition-provider.cjs');
 const version = require('./package.json').version;
 const registry = path.join(os.homedir(), '.liveshare-local', 'instances');
+
+// The helper reports the mode it enforces; keep the ignored User value visible.
+function readyIpc(helperIpc, access) {
+  const result = { ...helperIpc, migratedLegacy: access.migratedLegacy === true };
+  if (access.deprecatedModeIgnored === true) {
+    result.requestedMode = access.requestedMode;
+    result.deprecatedModeIgnored = true;
+  }
+  return result;
+}
 
 function activate(context) {
   if (process.platform !== 'win32') return;
@@ -21,6 +31,7 @@ function activate(context) {
   const startup=createStartupJournal({directory:path.join(path.dirname(registry),'startup-diagnostics'),pid:process.pid,version,log:message=>output.appendLine(message)});
   let child = null, ready = false, disposed = false, epoch = 1, id, discovery, ipc, starting=false, generation=0, restartTimer;
   let recoveryAttempts = 0, readyAt = 0, dispatchQueue = Promise.resolve();
+  const noticeSession = {};
   const fallbackState=new Map();
   const migrationState=context.globalState||{get:key=>fallbackState.get(key),update:async(key,value)=>{fallbackState.set(key,value)}};
   const powershellPath=()=>vscode.workspace.getConfiguration('liveshareWorkspaceBridge').get('powershell','')||path.join(process.env.SystemRoot||'C:\\Windows','System32','WindowsPowerShell','v1.0','powershell.exe');
@@ -68,7 +79,10 @@ function activate(context) {
     startup.begin(id,epoch,powershell);
     prepareAccess(config,migrationState,()=>listLocalUsers(powershell),vscode.ConfigurationTarget?.Global).then(access=>{
     if(disposed||token!==generation)return;
-    const args = ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', path.join(__dirname, 'pipe-host.ps1'), '-PipeName', `liveshare-local-${process.pid}-${id}`, '-ParentProcessId', String(process.pid),'-AccessMode',access.mode,'-SelectedSidsBase64',Buffer.from(JSON.stringify(access.selectedUserSids)).toString('base64')];
+    // The prompt must never delay or block the helper start.
+    noticeRemovedMode(vscode,access,noticeSession,line=>output.appendLine(line))
+      .catch(error=>output.appendLine('IPC access notice failed: '+error.message));
+    const args =['-NoLogo', '-NoProfile', '-NonInteractive', '-File', path.join(__dirname, 'pipe-host.ps1'), '-PipeName', `liveshare-local-${process.pid}-${id}`, '-ParentProcessId', String(process.pid),'-AccessMode',access.mode,'-SelectedSidsBase64',Buffer.from(JSON.stringify(access.selectedUserSids)).toString('base64')];
     startup.stage('process_start');
     const current = spawn(powershell, args, { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     child = current;starting=false;
@@ -102,7 +116,16 @@ function activate(context) {
       try { frame = JSON.parse(line); } catch { output.appendLine('Invalid IPC host frame.'); return; }
       if (frame.kind === 'ready') {
         if (child !== current) return;
-        stderrCapture.end();startup.ready(frame.shell);ipc = {...frame.ipc,migratedLegacy:access.migratedLegacy===true}; ready = true; readyAt = Date.now(); publish();updateStatus(); output.appendLine(`v${version}: local IPC ready (${['ownerOnly','allLocalUsers','selectedUsers'].includes(ipc?.mode)?ipc.mode:'unknown'}).`); return;
+        stderrCapture.end();
+        startup.ready(frame.shell);
+        ipc = readyIpc(frame.ipc, access);
+        ready = true;
+        readyAt = Date.now();
+        publish();
+        updateStatus();
+        const mode = MODES.includes(ipc?.mode) ? ipc.mode : 'unknown';
+        output.appendLine(`v${version}: local IPC ready (${mode}).`);
+        return;
       }
       if (frame.kind !== 'request') return;
       let response;

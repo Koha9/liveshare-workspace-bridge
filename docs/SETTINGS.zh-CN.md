@@ -11,9 +11,9 @@
 | `agent.enabled` | `boolean` / `true` | 工作区操作总开关。info／hostStatus 及安全诊断元数据仍可检查；关闭不回滚已派发效果。 | 后续请求即时生效；同时使 Host 绑定／资源引用失效。 |
 | `terminal.enabled` | `boolean` / `false` | 允许依赖 Host 的 API，仍需单项权限及已验证的共享 RW 终端。绑定可能创建／删除自有 bootstrap 临时文件；不会把普通 Guest shell 当 Host。 | 后续请求即时生效；同时使 Host 绑定／资源引用失效。 |
 | `powershell` | `string` / `""` | Guest 本机 IPC／账号辅助进程的 PowerShell 路径覆盖；空值用系统 Windows PowerShell。不选择 Host 终端 shell，也不改变执行策略。 | 下次本机桥接启动使用，不自动切换正在运行的辅助进程。 |
-| `ipc.accessMode` | `string` / `"ownerOnly"` | ownerOnly／allLocalUsers／selectedUsers。所属用户始终保留；额外账户仅当前本机 SAM 用户且同 Windows session ID，不是 Everyone、组或全部域用户，域控拒绝枚举。信任其全部进程，调用超出 Codex 文件系统沙箱，仍受桥接权限约束。 | 重启 IPC 桥接、改变实例与 epoch，需重新发现。 |
+| `ipc.accessMode` | `string` / `"ownerOnly"` | ownerOnly／selectedUsers（0.3.0 移除的 allLocalUsers 按 ownerOnly 运行，不改写设置）。所属用户始终保留；额外账户仅当前本机 SAM 用户且同 Windows session ID，不是 Everyone、组或全部域用户，域控拒绝枚举。信任其全部进程，调用超出 Codex 文件系统沙箱，仍受桥接权限约束。 | 重启 IPC 桥接、改变实例与 epoch，需重新发现。 |
 | `ipc.selectedUserSids` | `array` / `[]` | 仅 selectedUsers 使用的稳定 SID，其他模式不据此授权。唯一列表、最多 256 字符串；UI 检查本机用户 SID 格式，运行时还限制每项 184 字符并验证 SAM 成员。名称只供显示，改名不影响，删除重建不替换。 | 重启 IPC 桥接、改变实例与 epoch，需重新发现。 |
-| `ipc.allowCodexSandboxClients` | `boolean` / `false` | 废弃兼容项。无明确 User 模式时，true 把原有两个沙箱身份按 SID 固定到 selectedUsers，false／未设置保持 ownerOnly；明确模式优先。绝不自动 allLocalUsers 或开启 Host。首次迁移写 User 设置，布尔无法恢复快照前已删重建的历史 SID。 | 重启 IPC 桥接、改变实例与 epoch，需重新发现。 |
+| `ipc.allowCodexSandboxClients` | `boolean` / `false` | 废弃兼容项。无明确 User 模式时，true 把原有两个沙箱身份按 SID 固定到 selectedUsers，false／未设置保持 ownerOnly；明确模式优先。绝不开启 Host。首次迁移写 User 设置，布尔无法恢复快照前已删重建的历史 SID。 | 重启 IPC 桥接、改变实例与 epoch，需重新发现。 |
 | `terminal.name` | `string` / `""` | 准确的目标共享终端名；空值要求唯一合格共享 PTY。仍检查只读提示并验证绑定；标题不证明实际 shell／版本。 | 使 Host 绑定失效，下次允许的 Host 调用重绑。 |
 | `terminal.hostWorkspacePath` | `string` / `""` | 可选的明确 Host 根目录；空值核对共享 PowerShell 当前目录与 Guest 根。是 Host 路径，不是 Guest 本机路径；hostBind 请求参数可覆盖。 | 使 Host 绑定失效，下次允许的 Host 调用重绑。 |
 | `terminal.commandTimeoutMs` | `integer` / `120000` / 1000..3600000 | Host 子命令默认超时，单位毫秒；hostExec 的 timeoutMs 可在合法范围覆盖。已启动任务保留原截止时间；不是全部 IPC／握手超时。 | 使 Host 绑定失效，下次允许的 Host 调用重绑。 |

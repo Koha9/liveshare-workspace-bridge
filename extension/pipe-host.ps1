@@ -1,4 +1,4 @@
-param([string]$PipeName, [int]$ParentProcessId = 0, [ValidateSet('ownerOnly','allLocalUsers','selectedUsers')][string]$AccessMode='ownerOnly', [string]$SelectedSidsBase64='W10=', [switch]$ListLocalUsers)
+param([string]$PipeName, [int]$ParentProcessId = 0, [ValidateSet('ownerOnly','selectedUsers')][string]$AccessMode='ownerOnly', [string]$SelectedSidsBase64='W10=', [switch]$ListLocalUsers)
 $ErrorActionPreference = 'Stop'
 $utf8 = [Text.UTF8Encoding]::new($false)
 [Console]::InputEncoding = $utf8

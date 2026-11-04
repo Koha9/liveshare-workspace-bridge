@@ -12,7 +12,9 @@ $a.Name='PC\\Renamed';$renamed=[LswbIpcV022.LocalAccounts]::Select('selectedUser
 $replacement=[LswbIpcV022.LocalAccount]::new();$replacement.Sid='S-1-5-21-11-22-33-2001';$replacement.Name='PC\\Old'
 $deleted=[LswbIpcV022.LocalAccounts]::Select('selectedUsers',[string[]]@($a.Sid),[LswbIpcV022.LocalAccount[]]@($replacement,$b));Assert ($deleted.Allowed.Count -eq 0 -and $deleted.Issues[0].Reason -eq 'unavailableLocalUser') 'Recreated account inherited trust'
 $invalid=[LswbIpcV022.LocalAccounts]::Select('selectedUsers',[string[]]@('S-1-1-0','bad','S-1-5-21-44-55-66-1001'),$catalog);Assert ($invalid.Allowed.Count -eq 0 -and $invalid.Issues.Count -eq 3) 'Invalid/domain SID granted'
-Assert (([LswbIpcV022.LocalAccounts]::Select('allLocalUsers',[string[]]@(),$catalog)).Allowed.Count -eq 2) 'All-local scope wrong'
+$removedRejected=$false
+try{$null=[LswbIpcV022.LocalAccounts]::Select('allLocalUsers',[string[]]@(),$catalog)}catch{$removedRejected=$true}
+Assert $removedRejected 'Removed allLocalUsers mode was accepted'
 Assert (([LswbIpcV022.LocalAccounts]::Select('ownerOnly',[string[]]@($a.Sid),$catalog)).Allowed.Count -eq 0) 'Owner-only used selected accounts'
 [Console]::WriteLine('POLICY_OK')`;
 const out=await new Promise((resolve,reject)=>{const child=spawn(path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe'),['-NoLogo','-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{windowsHide:true});let stdout='',stderr='';child.stdout.on('data',x=>stdout+=x);child.stderr.on('data',x=>stderr+=x);child.once('error',reject);child.once('close',code=>resolve({code,stdout,stderr}));});assert.equal(out.code,0,out.stderr);assert.match(out.stdout,/POLICY_OK/);
