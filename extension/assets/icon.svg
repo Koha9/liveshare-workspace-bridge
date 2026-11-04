@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="iris" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5EEAD4"/>
+      <stop offset="0.35" stop-color="#38BDF8"/>
+      <stop offset="0.65" stop-color="#A78BFA"/>
+      <stop offset="1" stop-color="#F472B6"/>
+    </linearGradient>
+  </defs>
+  <!-- No backing tile: scale the glyph to fill the transparent canvas. -->
+  <g transform="translate(512 512) scale(1.15) translate(-516 -476)">
+    <!-- code lines -->
+    <rect x="160" y="540" width="132" height="64" rx="32" fill="#7D8AA8"/>
+    <rect x="440" y="540" width="200" height="64" rx="32" fill="#38BDF8"/>
+    <rect x="160" y="680" width="560" height="64" rx="32" fill="#7D8AA8"/>
+    <rect x="160" y="820" width="380" height="64" rx="32" fill="#7D8AA8"/>
+    <!-- agent caret and name flag -->
+    <rect x="332" y="300" width="72" height="340" rx="24" fill="#FF8A3D"/>
+    <rect x="332" y="168" width="400" height="232" rx="56" fill="#FF8A3D"/>
+    <path d="M416 232 L476 284 L416 336" fill="none" stroke="#161B26" stroke-width="44" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M518 336 H612" stroke="#161B26" stroke-width="44" stroke-linecap="round"/>
+    <!-- AI sparkle -->
+    <path d="M744 68 Q764 176 872 196 Q764 216 744 324 Q724 216 616 196 Q724 176 744 68 Z" fill="url(#iris)" stroke="#161B26" stroke-width="22" stroke-linejoin="round"/>
+  </g>
+</svg>
