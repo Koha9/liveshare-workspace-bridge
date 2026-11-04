@@ -261,9 +261,12 @@ function createHostChannel(vscode, identity, permissions, internal = {}) {
     return override > 0 ? override : hostPort;
   }
 
-  function promptHost(hostPort, controller) {
-    const message = `Ask the Host to run "Live Share: Share Server" and enter port ${hostPort}. Waiting for the forwarded port…`;
-    log(message);
+  function waitingMessage(hostPort) {
+    return `Ask the Host to run "Live Share: Share Server" and enter port ${hostPort}. Waiting for the forwarded port…`;
+  }
+
+  // The message is logged once, by setHandshake when the wait starts.
+  function promptHost(message, controller) {
     const shown = vscode.window.showInformationMessage?.(message, 'Cancel');
     Promise.resolve(shown).then(choice => {
       if (choice === 'Cancel' && !controller.signal.aborted) {
@@ -286,8 +289,9 @@ function createHostChannel(vscode, identity, permissions, internal = {}) {
     const controller = new AbortController();
     const nonce = newNonce();
     state.pending = { nonce, op: 'hostBind', terminal, kind: 'handshake', reject: reason => controller.abort(abortReason(reason)) };
-    setHandshake({ state: 'waitingForward', hostPort, guestPort: guestPortFor(hostPort) });
-    promptHost(hostPort, controller);
+    const message = waitingMessage(hostPort);
+    setHandshake({ state: 'waitingForward', hostPort, guestPort: guestPortFor(hostPort), message });
+    promptHost(message, controller);
     let warned = false;
     const notify = outcome => {
       setHandshake({ guestPort: outcome.port, message: outcome.message });
