@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const { removeTempDirectory } = require('./temp-cleanup.cjs');
 const { installLauncher, launcherPath, renderMcpConfig } = require('../mcp-launcher-install.cjs');
 
 const SOURCE = path.join(__dirname, '..', 'mcp-launcher.cjs');
@@ -12,7 +13,7 @@ const NOT_FOUND = 'No running Live Share Workspace Bridge instance was found.';
 
 function tempDir(t, prefix) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeTempDirectory(dir, { prefix }));
   return dir;
 }
 
