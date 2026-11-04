@@ -32,7 +32,20 @@ test('extension starts before joining, refreshes workspace epoch, restarts and r
   try { Module._load = function(name, parent, isMain) { if(name==='node:os')return {...os,homedir:()=>localHome};return name === 'vscode' ? vscode : loader.call(this, name, parent, isMain); }; extension = require('../extension.cjs'); }
   finally { Module._load = loader; }
   t.after(() => { for (const disposable of context.subscriptions.slice().reverse()) disposable.dispose();assert.equal(path.dirname(localHome),os.tmpdir());assert.ok(path.basename(localHome).startsWith('lswb-lifecycle-home-'));fs.rmSync(localHome,{recursive:true,force:true}); });
+  // A record left by a window whose process exited is removed at activation.
+  const leftoverDirectory = path.join(localHome, '.liveshare-local', 'instances');
+  const leftoverPid = await new Promise((resolve, reject) => {
+    const child = require('node:child_process').spawn(process.execPath, ['-e', ''], { windowsHide: true });
+    child.on('error', reject);
+    child.on('exit', () => resolve(child.pid));
+  });
+  const leftoverId = require('node:crypto').randomUUID();
+  const leftover = path.join(leftoverDirectory, `${leftoverId}.json`);
+  fs.mkdirSync(leftoverDirectory, { recursive: true });
+  fs.writeFileSync(leftover, JSON.stringify({ id: leftoverId, epoch: 1, version: '0.2.4', pipeName: `liveshare-local-${leftoverPid}-${leftoverId}`, pid: leftoverPid, roots: [] }));
   extension.activate(context);
+  assert.equal(fs.existsSync(leftover), false);
+  assert.ok(bridgeOutput.join('').includes('Removed 1 discovery record(s) left by exited VS Code windows.'));
   assert.deepEqual([...commands.keys()].sort(), manifest.contributes.commands.map(x => x.command).sort());
   assert.ok(commands.has('liveshareWorkspaceBridge.copyMcpConfig'));
   const launcher = path.join(localHome, '.liveshare-local', 'mcp-server.cjs');
