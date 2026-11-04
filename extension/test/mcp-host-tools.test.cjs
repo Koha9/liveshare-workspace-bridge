@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
+const { removeTempDirectory } = require('./temp-cleanup.cjs');
 const path = require('node:path');
 
 const tools = require('../mcp-tools.cjs');
@@ -31,7 +32,7 @@ const PATCH = 'diff --git a/a.txt b/a.txt\n--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@
 
 function makeTempDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lswb-mcp-host-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  t.after(() => removeTempDirectory(dir, { prefix: 'lswb-mcp-host-' }));
   return dir;
 }
 

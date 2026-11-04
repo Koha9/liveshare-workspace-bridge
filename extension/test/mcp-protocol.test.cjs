@@ -8,6 +8,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
+const { removeTempDirectory } = require('./temp-cleanup.cjs');
 
 const EXTENSION_DIR = path.join(__dirname, '..');
 const { version: PACKAGE_VERSION } = require('../package.json');
@@ -15,7 +16,7 @@ const RESPONSE_TIMEOUT_MS = 10000;
 
 function makeTempRegistry(t) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'lswb-mcp-'));
-  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  t.after(() => removeTempDirectory(base, { prefix: 'lswb-mcp-' }));
   // Nested on purpose: discover() also reads <parent>/startup-diagnostics.
   return path.join(base, 'instances');
 }

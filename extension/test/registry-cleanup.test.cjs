@@ -7,10 +7,11 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { cleanupStaleRecords } = require('../registry-cleanup.cjs');
+const { removeTempDirectory } = require('./temp-cleanup.cjs');
 
 function temporaryRegistry(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lswb-registry-cleanup-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  t.after(() => removeTempDirectory(root, { prefix: 'lswb-registry-cleanup-' }));
   const registry = path.join(root, 'instances');
   fs.mkdirSync(registry);
   return { root, registry };

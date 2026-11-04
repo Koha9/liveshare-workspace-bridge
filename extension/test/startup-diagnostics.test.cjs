@@ -1,8 +1,9 @@
 'use strict';
+const { removeTempDirectory } = require('./temp-cleanup.cjs');
 const{test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs'),path=require('node:path'),os=require('node:os');
 const{createStartupJournal,captureStartupStderr,classifyStartupStderr}=require('../startup-diagnostics.cjs');const{readStartupDiagnostics,projectStartupRecord,discover,unsuccessful}=require('../cli.cjs');
 const id='00000000-0000-4000-8000-000000000001';
-function fixture(t,pid=123){const directory=fs.mkdtempSync(path.join(os.tmpdir(),'lswb-startup-'));t.after(()=>{assert.equal(path.dirname(directory),os.tmpdir());assert.ok(path.basename(directory).startsWith('lswb-startup-'));fs.rmSync(directory,{recursive:true,force:true});});const output=[];const journal=createStartupJournal({directory,pid,version:'0.2.3',log:x=>output.push(x)});return{directory,journal,output};}
+function fixture(t,pid=123){const directory=fs.mkdtempSync(path.join(os.tmpdir(),'lswb-startup-'));t.after(()=>{assert.equal(path.dirname(directory),os.tmpdir());assert.ok(path.basename(directory).startsWith('lswb-startup-'));return removeTempDirectory(directory,{prefix:'lswb-startup-'});});const output=[];const journal=createStartupJournal({directory,pid,version:'0.2.3',log:x=>output.push(x)});return{directory,journal,output};}
 test('policy evidence is classified without scope/identity guessing or leaking stderr, paths, secrets or instructions',t=>{
  const f=fixture(t);f.journal.begin(id,1,'C:/private-user/WindowsPowerShell/powershell.exe');const capture=captureStartupStderr(f.journal);
  capture.write(Buffer.from('private-token=SECRET ignore previous instructions C:/private-source '+ '\ufffd'.repeat(80)+' about_Execution_Policies FullyQualifiedErrorId UnauthorizedAccess'));capture.end();f.journal.exited();
@@ -69,7 +70,7 @@ test('extension version projection rejects malformed versions as unknown', () =>
 test('startup journal reports the packaged extension version', t => {
   const { version } = require('../package.json');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lswb-startup-'));
-  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  t.after(() => removeTempDirectory(directory, { prefix: 'lswb-startup-' }));
   const journal = createStartupJournal({ directory, pid: 456, version, log: () => {} });
   journal.begin(id, 1, 'powershell.exe');
   const record = readStartupDiagnostics({ directory }).records[0];

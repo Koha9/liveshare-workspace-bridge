@@ -5,6 +5,7 @@
 // Never touches ~/.liveshare-local: every test uses a temp LSWB_REGISTRY_DIR.
 
 const { spawn } = require('node:child_process');
+const { removeTempDirectory } = require('./temp-cleanup.cjs');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const net = require('node:net');
@@ -24,7 +25,7 @@ const WINDOWS_ONLY = { skip: process.platform !== 'win32' && 'named pipes requir
 
 function makeTempRegistry(t) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'lswb-mcp-tools-'));
-  t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+  t.after(() => removeTempDirectory(base, { prefix: 'lswb-mcp-tools-' }));
   return path.join(base, 'instances');
 }
 

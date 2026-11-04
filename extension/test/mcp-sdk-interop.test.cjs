@@ -1,4 +1,5 @@
 'use strict';
+const { removeTempDirectory } = require('./temp-cleanup.cjs');
 
 // Interoperability check against the official MCP TypeScript SDK client.
 // The SDK is a devDependency only; without node_modules this file skips.
@@ -32,7 +33,7 @@ if (skipReason) {
     const { StdioClientTransport } = require('@modelcontextprotocol/sdk/client/stdio.js');
 
     const base = fs.mkdtempSync(path.join(os.tmpdir(), 'lswb-mcp-sdk-'));
-    t.after(() => fs.rmSync(base, { recursive: true, force: true }));
+    t.after(() => removeTempDirectory(base, { prefix: 'lswb-mcp-sdk-' }));
 
     const transport = new StdioClientTransport({
       command: process.execPath,
