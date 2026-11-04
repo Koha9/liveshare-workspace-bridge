@@ -171,3 +171,70 @@ test('renamed Host settings invalidate the binding; portForward tuning keys do n
     assert.equal(invalidates(key), false, key);
   }
 });
+
+// Real VS Code rejects openTextDocument for a missing file with a plain Error
+// (message only, no code) and rejects workspace.fs.stat with a FileSystemError
+// whose code is FileNotFound. Model both so not_found is derived as in VS Code.
+class FileSystemError extends Error {
+  constructor(message, code) {
+    super(message);
+    this.code = code;
+    this.name = `${code === 'FileNotFound' ? 'EntryNotFound' : code} (FileSystemError)`;
+  }
+  static FileNotFound(uri) { return new FileSystemError(`${uri} does not exist`, 'FileNotFound'); }
+  static NoPermissions(uri) { return new FileSystemError(`${uri} is not accessible`, 'NoPermissions'); }
+}
+function vscodeLikeOpen(f, statFor) {
+  f.vscode.FileSystemError = FileSystemError;
+  f.calls.stats = [];
+  const open = f.vscode.workspace.openTextDocument;
+  f.vscode.workspace.openTextDocument = async uri => {
+    if (f.docs.has(uri.toString())) return open(uri);
+    throw new Error(`cannot open ${uri}. Detail: Unable to read file '${uri}'`);
+  };
+  f.vscode.workspace.fs.stat = async uri => {
+    f.calls.stats.push(uri.toString());
+    const outcome = statFor(uri);
+    if (outcome instanceof Error) throw outcome;
+    return outcome;
+  };
+}
+test('readMany reports a missing file as not_found and keeps the existing file', async () => {
+  const f = fixture({ 'a.txt': 'alpha\n' });
+  vscodeLikeOpen(f, uri => FileSystemError.FileNotFound(uri));
+  const r = await f.send({ op: 'readMany', files: [{ path: 'a.txt' }, { path: 'missing.txt' }] });
+  assert.equal(r.files[0].ok, true);
+  assert.equal(r.files[0].result.text, 'alpha\n');
+  assert.equal(r.files[1].ok, false);
+  assert.equal(r.files[1].path, 'missing.txt');
+  assert.equal(r.files[1].error.code, 'not_found');
+  assert.deepEqual(f.calls.stats, ['vsls:/missing.txt']);
+});
+test('read of a missing file fails with not_found', async () => {
+  const f = fixture({ 'a.txt': 'alpha' });
+  vscodeLikeOpen(f, uri => FileSystemError.FileNotFound(uri));
+  await assert.rejects(f.send({ op: 'read', path: 'nested/missing.txt' }), { code: 'not_found' });
+});
+test('an open error already carrying FileNotFound becomes not_found without a stat', async () => {
+  const f = fixture({ 'a.txt': 'alpha' });
+  f.calls.stats = [];
+  f.vscode.workspace.fs.stat = async uri => { f.calls.stats.push(uri.toString()); return { type: 1 }; };
+  await assert.rejects(f.send({ op: 'read', path: 'gone.txt' }), { code: 'not_found' });
+  assert.deepEqual(f.calls.stats, []);
+});
+test('open failures for existing or inaccessible files keep their original error', async () => {
+  const exists = fixture({ 'a.txt': 'alpha' });
+  vscodeLikeOpen(exists, () => ({ type: 1, size: 9 }));
+  const r = await exists.send({ op: 'readMany', files: [{ path: 'binary.bin' }] });
+  assert.equal(r.files[0].error.code, 'vscode_error');
+  assert.match(r.files[0].error.message, /cannot open/u);
+  const denied = fixture({ 'a.txt': 'alpha' });
+  vscodeLikeOpen(denied, uri => FileSystemError.NoPermissions(uri));
+  await assert.rejects(denied.send({ op: 'read', path: 'secret.txt' }), error => error.code === undefined && /cannot open/u.test(error.message));
+});
+test('not_found classification is limited to reads; edits keep the open error', async () => {
+  const f = fixture({ 'a.txt': 'alpha' });
+  vscodeLikeOpen(f, uri => FileSystemError.FileNotFound(uri));
+  await assert.rejects(f.send({ op: 'edit', files: [{ path: 'missing.txt', changes: [{ oldText: 'a', newText: 'b' }] }] }), error => error.code === undefined);
+  assert.deepEqual(f.calls.stats, []);
+});
