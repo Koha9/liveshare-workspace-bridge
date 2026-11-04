@@ -22,12 +22,40 @@ function powershellEnv() {
   return { ...process.env, PSModulePath: modules + ';' + (process.env.PSModulePath || '') };
 }
 
+const STOP_TIMEOUT_MS = 10000;
+// Helper processes started by each test. t.after hooks run in registration
+// order, so a directory created before its helper would otherwise be removed
+// while PowerShell still holds a handle in it (EPERM on Windows).
+const helpers = new WeakMap();
+
+function helpersOf(t) {
+  if (!helpers.has(t)) {
+    helpers.set(t, new Set());
+  }
+  return helpers.get(t);
+}
+
+function stopHelper(entry) {
+  const { child, exited } = entry;
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return Promise.resolve();
+  }
+  child.kill();
+  const timeout = new Promise(resolve => setTimeout(resolve, STOP_TIMEOUT_MS).unref());
+  return Promise.race([exited, timeout]);
+}
+
+function stopHelpers(t) {
+  return Promise.all([...helpersOf(t)].map(stopHelper));
+}
+
 function makeRoot(t, prefix = PREFIX) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  t.after(() => {
+  t.after(async () => {
     assert.ok(path.resolve(directory).startsWith(path.resolve(os.tmpdir()) + path.sep));
     assert.ok(path.basename(directory).startsWith(prefix));
-    fs.rmSync(directory, { recursive: true, force: true });
+    await stopHelpers(t);
+    fs.rmSync(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   });
   return directory;
 }
@@ -80,9 +108,9 @@ function startScript(t, script, scriptArgs) {
   const child = spawn(powershellPath(), args, { windowsHide: true, env: powershellEnv() });
   const state = { stdout: '', stderr: '' };
   const exited = new Promise(resolve => child.once('exit', code => resolve(code)));
-  t.after(() => {
-    if (child.exitCode === null) child.kill();
-  });
+  const entry = { child, exited };
+  helpersOf(t).add(entry);
+  t.after(() => stopHelper(entry));
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', chunk => { state.stderr += chunk; });
