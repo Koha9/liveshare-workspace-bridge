@@ -1,13 +1,13 @@
 'use strict';
 // Starts real Host helper scripts in Windows PowerShell and talks to them
 // over loopback TCP, for the Windows-only Host helper tests.
-const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const net = require('node:net');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
+const { removeTempDirectory, waitForExit } = require('./temp-cleanup.cjs');
 
 const SKIP = process.platform !== 'win32';
 const SCRIPT = path.join(__dirname, '..', 'host-server.ps1');
@@ -35,27 +35,21 @@ function helpersOf(t) {
   return helpers.get(t);
 }
 
-function stopHelper(entry) {
-  const { child, exited } = entry;
-  if (child.exitCode !== null || child.signalCode !== null) {
-    return Promise.resolve();
+// A foreground Host helper never exits on its own, so it is killed first;
+// removeTempDirectory then only confirms the exit before deleting.
+function stopHelper(child) {
+  if (child.exitCode === null && child.signalCode === null) {
+    child.kill();
   }
-  child.kill();
-  const timeout = new Promise(resolve => setTimeout(resolve, STOP_TIMEOUT_MS).unref());
-  return Promise.race([exited, timeout]);
-}
-
-function stopHelpers(t) {
-  return Promise.all([...helpersOf(t)].map(stopHelper));
+  return waitForExit(child, STOP_TIMEOUT_MS);
 }
 
 function makeRoot(t, prefix = PREFIX) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   t.after(async () => {
-    assert.ok(path.resolve(directory).startsWith(path.resolve(os.tmpdir()) + path.sep));
-    assert.ok(path.basename(directory).startsWith(prefix));
-    await stopHelpers(t);
-    fs.rmSync(directory, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+    const children = [...helpersOf(t)];
+    await Promise.all(children.map(stopHelper));
+    await removeTempDirectory(directory, { prefix, children });
   });
   return directory;
 }
@@ -108,9 +102,8 @@ function startScript(t, script, scriptArgs) {
   const child = spawn(powershellPath(), args, { windowsHide: true, env: powershellEnv() });
   const state = { stdout: '', stderr: '' };
   const exited = new Promise(resolve => child.once('exit', code => resolve(code)));
-  const entry = { child, exited };
-  helpersOf(t).add(entry);
-  t.after(() => stopHelper(entry));
+  helpersOf(t).add(child);
+  t.after(() => stopHelper(child));
   child.stdout.setEncoding('utf8');
   child.stderr.setEncoding('utf8');
   child.stderr.on('data', chunk => { state.stderr += chunk; });
