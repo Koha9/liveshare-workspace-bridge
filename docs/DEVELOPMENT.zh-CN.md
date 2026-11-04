@@ -6,7 +6,6 @@
 
 ```text
 extension/                         Runtime, CLI and tests
-skills/liveshare-workspace-bridge/  Skill and self-contained client
 scripts/build.py                   Packaging and source checks
 docs/                              Current product/contributor guides
 dist/                              Ignored generated packages

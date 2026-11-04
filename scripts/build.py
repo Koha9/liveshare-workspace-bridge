@@ -1,4 +1,4 @@
-"""Build and verify the local VSIX and Codex skill with Python's standard library."""
+"""Build and verify the local VSIX with Python's standard library."""
 from __future__ import annotations
 
 import argparse
@@ -13,8 +13,7 @@ from xml.sax.saxutils import escape
 
 ROOT = Path(__file__).resolve().parent.parent
 EXTENSION = ROOT / "extension"
-SKILL_NAME = "liveshare-workspace-bridge"
-SKILL = ROOT / "skills" / SKILL_NAME
+PACKAGE_NAME = "liveshare-workspace-bridge"
 DIST = ROOT / "dist"
 RUNTIME_FILES = (
     "extension.cjs",
@@ -46,10 +45,6 @@ RUNTIME_FILES = (
 RELATIVE_REQUIRE = re.compile(r"""require\(\s*['"](\.\.?/[^'"]+)['"]\s*\)""")
 DOCUMENT_NAMES = ("README", "USAGE", "API", "ARCHITECTURE", "DEVELOPMENT", "TROUBLESHOOTING", "IPC-SECURITY", "STARTUP-DIAGNOSTICS", "CHANGELOG", "SETTINGS")
 LOCALES = ("", ".zh-CN", ".zh-TW", ".ja")
-SKILL_FILES = (
-    "SKILL.md", "agents/openai.yaml", "references/api.md", "references/recovery.md",
-    "scripts/liveshare.cjs",
-)
 
 
 def read_json(path: Path) -> dict:
@@ -59,8 +54,8 @@ def read_json(path: Path) -> dict:
 def check_sources() -> dict:
     package = read_json(EXTENSION / "package.json")
     root_package = read_json(ROOT / "package.json")
-    if root_package["name"] != SKILL_NAME or package["name"] != SKILL_NAME:
-        raise ValueError("Root, extension and skill must all be named liveshare-workspace-bridge.")
+    if root_package["name"] != PACKAGE_NAME or package["name"] != PACKAGE_NAME:
+        raise ValueError("Root and extension packages must both be named liveshare-workspace-bridge.")
     if root_package["version"] != package["version"]:
         raise ValueError("Root and extension package versions differ.")
     if root_package["license"] != package["license"]:
@@ -70,22 +65,6 @@ def check_sources() -> dict:
     for name in (*RUNTIME_FILES, "README.md"):
         if not (EXTENSION / name).is_file():
             raise ValueError(f"Missing extension file: {name}")
-    for name in SKILL_FILES:
-        if not (SKILL / name).is_file():
-            raise ValueError(f"Missing skill file: {name}")
-    skill_text = (SKILL / "SKILL.md").read_text(encoding="utf-8-sig")
-    if not skill_text.startswith("---\n"):
-        raise ValueError("Skill YAML frontmatter is missing.")
-    frontmatter = skill_text.split("---", 2)[1]
-    if not re.search(rf"^name: {re.escape(SKILL_NAME)}$", frontmatter, re.MULTILINE):
-        raise ValueError("Unexpected skill name.")
-    if not re.search(r"^description: .+", frontmatter, re.MULTILINE):
-        raise ValueError("Skill description is missing.")
-    version = re.search(r'^  version: "([^"]+)"$', frontmatter, re.MULTILINE)
-    if not version or version.group(1) != package["version"]:
-        raise ValueError("Skill and extension versions differ.")
-    if (EXTENSION / "cli.cjs").read_bytes() != (SKILL / "scripts/liveshare.cjs").read_bytes():
-        raise ValueError("Skill client is out of sync. Run scripts/build.py without --check to synchronize it.")
     return package
 
 
@@ -190,11 +169,8 @@ def package_members(package: dict) -> dict[str, dict[str, bytes]]:
         "[Content_Types].xml": content_types.encode("utf-8"),
     })
     check_relative_requires(extension_members)
-    skill_members = {f"{SKILL_NAME}/{name}": (SKILL / name).read_bytes() for name in SKILL_FILES}
-    skill_members[f"{SKILL_NAME}/LICENSE"] = (ROOT / "LICENSE").read_bytes()
     return {
         f"{package['name']}-{package['version']}.vsix": extension_members,
-        f"{SKILL_NAME}-{package['version']}.zip": skill_members,
     }
 
 
@@ -232,14 +208,12 @@ def verify(packages: dict[str, dict[str, bytes]]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     modes = parser.add_mutually_exclusive_group()
-    modes.add_argument("--check", action="store_true", help="Check source layout, versions and skill-client synchronization without writes.")
+    modes.add_argument("--check", action="store_true", help="Check source layout and versions without writes.")
     modes.add_argument("--verify", action="store_true", help="Verify existing packages against source and SHA-256 without writes.")
     args = parser.parse_args()
-    if not args.check and not args.verify:
-        (SKILL / "scripts/liveshare.cjs").write_bytes((EXTENSION / "cli.cjs").read_bytes())
     package = check_sources()
     if args.check:
-        print(f"Source checks passed for v{package['version']}; skill client is synchronized.")
+        print(f"Source checks passed for v{package['version']}.")
         return
     packages = package_members(package)
     if not args.verify:

@@ -102,13 +102,8 @@ Patches are at most 1 MiB/100 files, use a/ and b/ paths, and cannot escape root
 
 Small byte APIs are bounded by chunkBytes and check SHA-256. Directory copy requires a new destination and rejects reparse points/Git administration trees. Paths and ancestors stay inside verified Host root. Existing byte overwrite needs raw expectedCurrentSha256; text hashes differ. Normal writes do not trigger extra provider verification.
 
-```powershell
-node "<client>" upload --instance "<id>" --epoch "<epoch>" --workspace "vsls:/" --input "<local.bin>" --path "assets/file.bin"
-node "<client>" apply-patch --instance "<id>" --epoch "<epoch>" --workspace "vsls:/" --input "<local.patch>" --check-only
-```
+Agents upload local files with the MCP tool `lswb_upload_file` and apply local patch files with `lswb_apply_patch_file`; see the [MCP guide](MCP.md). Upload overwrite needs `overwrite` and the target's current raw `expectedCurrentSha256`. The enabled transfer protocol is transferBeginWrite, transferWrite(sequence/base64), transferCommit(sha256), transferAbort. Maximum frame sizes remain 2 MiB request/4 MiB response; uploads use many bounded chunks.
 
-Upload overwrite uses --overwrite and --expected-current-sha256 HASH. The enabled transfer protocol is transferBeginWrite, transferWrite(sequence/base64), transferCommit(sha256), transferAbort. Maximum frame sizes remain 2 MiB request/4 MiB response; uploads use many bounded chunks.
+Uploads stage in owned Host temporary files, delete-on-close with idle expiry; destination is updated only at commit. Identical immediately repeated upload sequences are idempotent; ordinary mutations are never automatically replayed. A lost commit reply requires inspecting target state/hash before restarting. Unsupported steps require a concrete user-assistance request and a reply before dependent work; see the [MCP guide](MCP.md).
 
-Uploads stage in owned Host temporary files, delete-on-close with idle expiry; destination is updated only at commit. Identical immediately repeated upload sequences are idempotent; ordinary mutations are never automatically replayed. A lost commit reply requires inspecting target state/hash before restarting. Unsupported steps require a concrete user-assistance request and a reply before dependent work, as described in the skill.
-
-Large downloads (`transferOpenRead`/`transferRead`, including CLI download) return `feature_unavailable`. Ask the user for an accessible copy and local path; do not bypass the limit with repeated byte reads or raw commands. Small byte reads and large uploads remain available.
+Large downloads (`transferOpenRead`/`transferRead`) return `feature_unavailable`. Ask the user for an accessible copy and local path; do not bypass the limit with repeated byte reads or raw commands. Small byte reads and large uploads remain available.

@@ -18,7 +18,7 @@ class ReleasePackageTests(unittest.TestCase):
         manifest = ET.fromstring(self.members['extension.vsixmanifest'])
         ns = {'v': 'http://schemas.microsoft.com/developer/vsx-schema/2011'}
         identity = manifest.find('v:Metadata/v:Identity', ns)
-        self.assertEqual(identity.attrib['Id'], build.SKILL_NAME)
+        self.assertEqual(identity.attrib['Id'], build.PACKAGE_NAME)
         self.assertEqual(self.package['displayName'], 'Live Share Workspace Bridge')
         self.assertEqual(identity.attrib['Publisher'], self.package['publisher'])
         self.assertEqual(identity.attrib['Version'], self.package['version'])
@@ -48,6 +48,15 @@ class ReleasePackageTests(unittest.TestCase):
             member = f'extension/{name}'
             self.assertTrue(member in self.members, f'{member} is not packaged')
         build.check_relative_requires(self.members)
+
+    def test_only_the_vsix_is_packaged_without_skill_content(self):
+        packages = build.package_members(self.package)
+        expected = f"{self.package['name']}-{self.package['version']}.vsix"
+        self.assertEqual(list(packages), [expected])
+        skill_markers = ('skills/', 'SKILL.md', 'liveshare.cjs', 'openai.yaml')
+        for name in self.members:
+            for marker in skill_markers:
+                self.assertNotIn(marker, name)
 
     def test_dangling_relative_require_fails_the_package(self):
         members = {

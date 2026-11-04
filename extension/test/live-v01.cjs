@@ -97,14 +97,17 @@ async function main() {
     assert.equal(badRoot.ok, false); assert.equal(badRoot.error.code, 'workspace_mismatch');
     const oldEpoch = await request(instance, { op: 'read', instance: instance.id, epoch: instance.epoch - 1, workspace, path: 'a' });
     assert.equal(oldEpoch.ok, false); assert.equal(oldEpoch.error.code, 'workspace_changed'); pass('workspace_and_epoch_binding');
-    const skillClient = process.env.LIVESHARE_SKILL_CLIENT || path.join(__dirname, '..', '..', 'skills', 'liveshare-workspace-bridge', 'scripts', 'liveshare.cjs');
-    const skillResult = await new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [skillClient, '--instance', instance.id, '--epoch', String(instance.epoch), '--workspace', workspace], { windowsHide: true });
+    // LIVESHARE_SKILL_CLIENT is the pre-0.3 name, still read for one release.
+    const defaultCliClient = path.join(__dirname, '..', 'cli.cjs');
+    const cliClient = process.env.LIVESHARE_CLI_CLIENT || process.env.LIVESHARE_SKILL_CLIENT || defaultCliClient;
+    const cliResult = await new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [cliClient, '--instance', instance.id, '--epoch', String(instance.epoch), '--workspace', workspace], { windowsHide: true });
       let stdout = '', stderr = ''; child.stdout.on('data', x => stdout += x); child.stderr.on('data', x => stderr += x); child.once('error', reject); child.once('close', code => resolve({ code, stdout, stderr }));
       child.stdin.end(JSON.stringify({ op: 'read', path: `${fixture}/a.js`, startLine: 1, endLine: 1 }));
     });
-    assert.equal(skillResult.code, 0, skillResult.stdout + skillResult.stderr);
-    assert.equal(JSON.parse(skillResult.stdout).result.text, 'export const localValue = 2;'); pass('self_contained_skill_client_real_read');
+    assert.equal(cliResult.code, 0, cliResult.stdout + cliResult.stderr);
+    assert.equal(JSON.parse(cliResult.stdout).result.text, 'export const localValue = 2;');
+    pass('cli_raw_request_real_read');
     receipt.acceptance = 'v0.1_core_passed_search_limitations_retained';
   } catch (err) { failure = err; receipt.failure = err.stack; receipt.acceptance = 'failed'; }
   finally {
