@@ -33,3 +33,14 @@ test('manifest contains the same English user-level controls as the server gate 
  const expected=configurationProperties(),actual=require('../package.json').contributes.configuration.properties;
  for(const [key,value]of Object.entries(expected)){assert.deepEqual(actual[key],value,key);assert.equal(actual[key].scope,'machine');assert.ok(!/[\u3400-\u9fff\u3040-\u30ff]/u.test(actual[key].markdownDescription||actual[key].description));}
 });
+test('IPC access mode schema offers only ownerOnly and selectedUsers',()=>{
+ const {MODES}=require('../ipc-access.cjs');
+ const manifest=require('../package.json').contributes.configuration.properties;
+ const mode=configurationProperties()['liveshareWorkspaceBridge.ipc.accessMode'];
+ assert.deepEqual(mode.enum,MODES);
+ assert.equal(mode.enumDescriptions.length,MODES.length);
+ assert.equal(mode.default,'ownerOnly');
+ assert.match(mode.markdownDescription,/allLocalUsers.*removed in 0\.3\.0.*ownerOnly/);
+ const legacy=manifest['liveshareWorkspaceBridge.ipc.allowCodexSandboxClients'];
+ assert.doesNotMatch(legacy.deprecationMessage,/allLocalUsers/);
+});

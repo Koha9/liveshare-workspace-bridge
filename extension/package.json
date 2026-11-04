@@ -332,25 +332,23 @@
           "default": false,
           "scope": "machine",
           "order": 11,
-          "deprecationMessage": "Use IPC Access Mode. A previously enabled legacy setting migrates once to selectedUsers and pinned local account SIDs, never to allLocalUsers.",
+          "deprecationMessage": "Use IPC Access Mode. A previously enabled legacy setting migrates once to selectedUsers and pinned local account SIDs.",
           "markdownDescription": "Legacy v0.2.1 compatibility only. Ignored when IPC Access Mode is explicitly configured. Migration pins the two existing sandbox accounts by SID; it does not create accounts or broaden trust."
         },
         "liveshareWorkspaceBridge.ipc.accessMode": {
           "type": "string",
           "enum": [
             "ownerOnly",
-            "allLocalUsers",
             "selectedUsers"
           ],
           "enumDescriptions": [
             "Only the Windows user running VS Code (release default).",
-            "All current machine-local SAM user accounts, in the same Windows session. No remote or domain users.",
             "Only the owner and selected machine-local user SIDs, in the same Windows session."
           ],
           "default": "ownerOnly",
           "scope": "machine",
           "order": 9,
-          "markdownDescription": "**IPC Access Mode** — Trust applies to every process under allowed accounts, not only Codex. Calls use bridge permissions outside Codex filesystem sandbox limits. Host access is independent; when enabled it may allow Host commands. Changes restart the bridge; rediscover afterward. Use Configure IPC Access to choose users."
+          "markdownDescription": "**IPC Access Mode** — Trust applies to every process under allowed accounts, not only Codex. Calls use bridge permissions outside Codex filesystem sandbox limits. Host access is independent; when enabled it may allow Host commands. Changes restart the bridge; rediscover afterward. Use Configure IPC Access to choose users. The former allLocalUsers value was removed in 0.3.0; a stored value runs as ownerOnly and is not rewritten."
         },
         "liveshareWorkspaceBridge.ipc.selectedUserSids": {
           "type": "array",
