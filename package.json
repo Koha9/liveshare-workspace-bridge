@@ -1,6 +1,6 @@
 {
   "name": "liveshare-workspace-bridge",
-  "version": "0.3.0-pre",
+  "version": "0.3.0",
   "private": true,
   "license": "MIT",
   "description": "Live Share Workspace Bridge VS Code extension and its MCP server.",

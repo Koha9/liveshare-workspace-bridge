@@ -12,7 +12,7 @@ Configure English User settings through **Live Share Workspace Bridge: Configure
 
 The owner is retained even if it is a domain user; additional grants are local only. Remote connections are rejected and all clients must share the bridge's Windows session ID. Domain controllers are refused for additional-account enumeration.
 
-Trust covers all processes of an allowed account, not one Codex task. Bridge calls are outside Codex filesystem sandbox boundaries and still obey agent/operation permissions. Host access is independent; when enabled and otherwise usable it can permit Host commands. The picker warns before broader access. Never enable a broader mode as an automatic error workaround.
+Trust covers all processes of an allowed account, not one agent task. Bridge calls are outside any agent's filesystem sandbox boundaries and still obey agent/operation permissions. Host access is independent; when enabled and otherwise usable it can permit Host commands. The picker warns before broader access. Never enable a broader mode as an automatic error workaround.
 
 The picker shows current names but stores SIDs. Renames keep access; deleted/recreated accounts do not inherit selection by name. Unavailable/invalid/non-local SIDs are reported and not granted. Cancel leaves settings unchanged.
 
@@ -26,7 +26,7 @@ Operation permission switches update subsequent requests live. IPC trust changes
 
 ## Removed allLocalUsers mode
 
-Version 0.3.0 removed allLocalUsers. Under the Codex sandbox, the MCP server runs under your own Windows account, so ownerOnly covers that path. Use selectedUsers for any other account.
+Version 0.3.0 removed allLocalUsers. Agents reach the bridge through the MCP server, which your agent starts under your own Windows account, so ownerOnly covers that path. Use selectedUsers for any other account.
 
 If your User settings still contain allLocalUsers, the bridge does not fail. It runs as ownerOnly, writes one line to the output channel on each start, and shows a single notice per window session with a Configure IPC Access button. It does not rewrite your settings; change the value yourself to stop the notice. info and lswb_status report ipc.mode as ownerOnly, with ipc.requestedMode allLocalUsers and ipc.deprecatedModeIgnored true. Any other unknown value still stops the bridge with a setup error. The native helper rejects allLocalUsers.
 

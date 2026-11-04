@@ -1,8 +1,8 @@
 {
   "name": "liveshare-workspace-bridge",
   "displayName": "Live Share Workspace Bridge",
-  "description": "Edit Live Share workspaces with permission controls and an optional verified Host PowerShell bridge, without ports or copied tokens.",
-  "version": "0.3.0-pre",
+  "description": "Let AI agents work in a Live Share Guest workspace through a local MCP server, with per-operation permissions and an optional Host channel over a Live Share forwarded port.",
+  "version": "0.3.0",
   "publisher": "Koha9-Lee",
   "license": "MIT",
   "repository": {
@@ -19,7 +19,8 @@
   "keywords": [
     "live share",
     "liveshare",
-    "codex",
+    "mcp",
+    "ai-agent",
     "workspace",
     "automation"
   ],
@@ -387,7 +388,7 @@
           "default": "ownerOnly",
           "scope": "machine",
           "order": 9,
-          "markdownDescription": "**IPC Access Mode** — Trust applies to every process under allowed accounts, not only Codex. Calls use bridge permissions outside Codex filesystem sandbox limits. Host access is independent; when enabled it may allow Host commands. Changes restart the bridge; rediscover afterward. Use Configure IPC Access to choose users. The former allLocalUsers value was removed in 0.3.0; a stored value runs as ownerOnly and is not rewritten."
+          "markdownDescription": "**IPC Access Mode** — Trust applies to every process under allowed accounts, not only the agent. Calls use bridge permissions, outside any agent filesystem sandbox. Host access is independent; when enabled it may allow Host commands. Changes restart the bridge; rediscover afterward. Use Configure IPC Access to choose users. The former allLocalUsers value was removed in 0.3.0; a stored value runs as ownerOnly and is not rewritten."
         },
         "liveshareWorkspaceBridge.ipc.selectedUserSids": {
           "type": "array",
