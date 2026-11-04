@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 'use strict';
-// Self-contained: this file is also distributed as the Codex skill client.
+// Human diagnostic CLI and the local transport library used by the MCP server.
+// Agents use the MCP server (mcp-server.cjs); keep the exports below stable.
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -165,7 +166,7 @@ async function selected(body, options) {
 }
 // Chunked upload over an already-bound call(body): begin, write x n, commit.
 // Any failure triggers a best-effort transferAbort; commit is never retried.
-// Shared by the CLI and the MCP adapter so both run the same transfer loop.
+// Used by the MCP adapter (lswb_upload_file).
 function sourceChanged(initial, current, total) {
   return current.size !== initial.size || current.mtimeMs !== initial.mtimeMs || total !== initial.size;
 }
@@ -218,59 +219,74 @@ async function uploadTransfer(call, options) {
     }
   }
 }
-async function transferClient(mode, options) {
-  if(!options.path)throw new Error('--path is required.');
-  const {instance,base}=await selected({op:mode},options);
-  let transferId, temporary;
-  let lastProgress=0;
-  const progress=(bytes,total)=>{if(options.progress&&(bytes===total||Date.now()-lastProgress>=1000)){lastProgress=Date.now();process.stderr.write(`${mode}: ${bytes}/${total} bytes\n`);}};
-  const call=async body=>{const reply=await request(instance,{...base,...body});if(!reply.ok)throw Object.assign(new Error(reply.error.message),{code:reply.error.code,details:reply.error.details});return reply.result;};
-  try {
-    if(mode==='upload'){
-      if(!options.input)throw new Error('--input is required.');
-      const result=await uploadTransfer(call,{input:options.input,path:options.path,overwrite:options.overwrite===true,expectedCurrentSha256:options['expected-current-sha256'],progress});
-      return {ok:true,result};
-    }
-    if(!options.output)throw new Error('--output is required.');
-    if(/^(?:vsls|file):/iu.test(options.output))throw new Error('Download output must be a local filesystem path.');
-    const output=path.resolve(options.output);if(!options.overwrite&&fs.existsSync(output))throw new Error('Local destination already exists.');
-    temporary=output+'.lswb-'+crypto.randomUUID()+'.part';const handle=fs.openSync(temporary,'wx');
-    let total=0,verifiedSha256;const hash=crypto.createHash('sha256');
-    try{
-      const begin=await call({op:'transferOpenRead',path:options.path});transferId=begin.transferId;
-      for(;;){const chunk=await call({op:'transferRead',transferId,offset:total,count:begin.chunkBytes});const data=Buffer.from(chunk.base64,'base64');if(chunk.offset!==total||chunk.nextOffset!==total+data.length||data.length>begin.chunkBytes||(!data.length&&!chunk.complete))throw new Error('Invalid download chunk offset.');let written=0;while(written<data.length)written+=fs.writeSync(handle,data,written,data.length-written,null);hash.update(data);total+=data.length;progress(total,begin.size);if(chunk.complete){verifiedSha256=hash.digest('hex');if(total!==begin.size||verifiedSha256!==chunk.sha256)throw new Error('Download SHA-256 mismatch.');break;}}
-    }finally{fs.closeSync(handle);}
-    await call({op:'transferAbort',transferId});transferId=null;
-    if(options.overwrite)fs.renameSync(temporary,output);
-    else {fs.copyFileSync(temporary,output,fs.constants.COPYFILE_EXCL);fs.unlinkSync(temporary);}
-    temporary=null;return {ok:true,result:{downloaded:true,path:options.path,output,bytes:total,sha256:verifiedSha256}};
-  }finally{
-    if(transferId)try{await call({op:'transferAbort',transferId});}catch{}
-    if(temporary)try{fs.unlinkSync(temporary);}catch{}
+const HELP_TEXT = [
+  'Diagnostic CLI for Live Share Workspace Bridge.',
+  'Agents should use the MCP server; see docs/MCP.md.',
+  '',
+  'instances                 List connected bridge windows and their shared roots.',
+  'diagnose                  Read-only discovery diagnostics.',
+  '[--instance ID --epoch N --workspace URI] [--request FILE]',
+  '                          Send one raw JSON request (stdin when --request is omitted).',
+  'Pin instance/epoch/workspace on raw requests.',
+  '',
+].join('\n');
+const VALUE_OPTIONS = ['--instance', '--workspace', '--request', '--epoch'];
+
+function printJson(value) {
+  process.stdout.write(JSON.stringify(value, null, 2) + '\n');
+}
+async function runDiagnose() {
+  const report = await discover();
+  const ready = report.instances.some(x => x.roots.length);
+  printJson({ ok: ready, result: diagnosticReport(report) });
+  if (!ready) {
+    process.exitCode = 1;
+  }
+}
+function readRequestBody(options) {
+  const source = options.request || 0;
+  const raw = fs.readFileSync(source, 'utf8').replace(/^\uFEFF/u, '');
+  if (Buffer.byteLength(raw, 'utf8') > MAX_REQUEST) {
+    throw new Error('Request exceeds 2 MiB.');
+  }
+  const body = JSON.parse(raw);
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new Error('Request must be an object.');
+  }
+  return body;
+}
+async function sendRawRequest(options) {
+  const body = readRequestBody(options);
+  const { instance, base } = await selected(body, options);
+  const response = await request(instance, { ...body, ...base });
+  printJson(response);
+  if (unsuccessful(response, body.op)) {
+    process.exitCode = 1;
   }
 }
 async function main() {
-  const args = process.argv.slice(2), options = {};
-  if (args.length === 1 && args[0] === 'diagnose') { const report = await discover(); process.stdout.write(JSON.stringify({ ok: report.instances.some(x=>x.roots.length), result: diagnosticReport(report) }, null, 2)+'\n'); if (!report.instances.some(x=>x.roots.length)) process.exitCode=1; return; }
-  const mode=['upload','download','apply-patch'].includes(args[0])?args.shift():null;
+  const args = process.argv.slice(2);
+  const options = {};
+  if (args.length === 1 && args[0] === 'diagnose') {
+    await runDiagnose();
+    return;
+  }
   while (args.length) {
     const key = args.shift();
-    if (key === 'instances') { process.stdout.write(JSON.stringify(await instances(), null, 2) + '\n'); return; }
-    if (key === '--help') { process.stdout.write('instances | diagnose (read-only discovery diagnostics) | [--instance ID --epoch N --workspace URI] [--request FILE]\nupload --input LOCAL --path SHARED [--overwrite --expected-current-sha256 HASH]\ndownload --path SHARED --output LOCAL [--overwrite] (unavailable in v0.2)\napply-patch --input LOCAL.patch [--check-only]\nPin instance/epoch/workspace on all operations. JSON from stdin when --request is omitted.\n'); return; }
-    if(['--overwrite','--check-only','--progress'].includes(key)){options[key.slice(2)]=true;continue;}
-    if (!['--instance', '--workspace', '--request', '--epoch','--input','--output','--path','--expected-current-sha256'].includes(key) || !args.length) throw new Error(`Unknown or incomplete option: ${key}`);
+    if (key === 'instances') {
+      printJson(await instances());
+      return;
+    }
+    if (key === '--help') {
+      process.stdout.write(HELP_TEXT);
+      return;
+    }
+    if (!VALUE_OPTIONS.includes(key) || !args.length) {
+      throw new Error(`Unknown or incomplete option: ${key}`);
+    }
     options[key.slice(2)] = args.shift();
   }
-  if(mode==='upload'||mode==='download'){const response=await transferClient(mode,options);process.stdout.write(JSON.stringify(response,null,2)+'\n');return;}
-  if(mode==='apply-patch'&&!options.input)throw new Error('--input is required.');
-  const raw = mode==='apply-patch' ? JSON.stringify({op:'applyPatch',patch:fs.readFileSync(options.input,'utf8').replace(/^\uFEFF/u,''),checkOnly:options['check-only']===true}) : fs.readFileSync(options.request || 0, 'utf8').replace(/^\uFEFF/u, '');
-  if (Buffer.byteLength(raw, 'utf8') > MAX_REQUEST) throw new Error('Request exceeds 2 MiB.');
-  const body = JSON.parse(raw);
-  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('Request must be an object.');
-  const {instance,base}=await selected(body,options);
-  const response = await request(instance, {...body,...base});
-  process.stdout.write(JSON.stringify(response, null, 2) + '\n');
-  if (unsuccessful(response,body.op)) process.exitCode = 1;
+  await sendRawRequest(options);
 }
 if (require.main === module) main().catch(err => { process.stdout.write(JSON.stringify({ ok: false, error: { code: err.code || 'client_error', message: err.message, ...(err.details !== undefined ? { details: err.details } : {}), ...(err.transportCode ? { transportCode: err.transportCode } : {}), ...(err.requestSent !== undefined ? { requestSent: err.requestSent } : {}) } }, null, 2) + '\n'); process.exitCode = 1; });
-module.exports = { request, instances, records, inspectRecords, discover, diagnosticReport, unsuccessful, transferClient, uploadTransfer, projectStartupRecord, readStartupDiagnostics };
+module.exports = { request, instances, records, inspectRecords, discover, diagnosticReport, unsuccessful, uploadTransfer, projectStartupRecord, readStartupDiagnostics };
