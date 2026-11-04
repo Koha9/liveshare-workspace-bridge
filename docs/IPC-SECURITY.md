@@ -8,10 +8,9 @@ Configure English User settings through **Live Share Workspace Bridge: Configure
 | Mode | Access beyond the bridge owner |
 |---|---|
 | ownerOnly | None; release default. |
-| allLocalUsers | Current machine-local SAM users, including disabled accounts with existing processes. Not Everyone, groups or all domain users. |
 | selectedUsers | Current local users matching saved ipc.selectedUserSids. |
 
-The owner is retained even if it is a domain user; additional grants are local only. Remote connections are rejected and all clients must share the bridge's Windows session ID. Domain controllers are refused for additional-account enumeration. All-local membership is refreshed at bridge startup, not by creating or watching accounts.
+The owner is retained even if it is a domain user; additional grants are local only. Remote connections are rejected and all clients must share the bridge's Windows session ID. Domain controllers are refused for additional-account enumeration.
 
 Trust covers all processes of an allowed account, not one Codex task. Bridge calls are outside Codex filesystem sandbox boundaries and still obey agent/operation permissions. Host access is independent; when enabled and otherwise usable it can permit Host commands. The picker warns before broader access. Never enable a broader mode as an automatic error workaround.
 
@@ -19,11 +18,17 @@ The picker shows current names but stores SIDs. Renames keep access; deleted/rec
 
 ## Compatibility migration
 
-When ipc.accessMode has no explicit User value and legacy ipc.allowCodexSandboxClients is true, initial migration resolves only existing CodexSandboxOffline/Online identities, caches their SIDs, saves ipc.selectedUserSids and selectedUsers. It never selects allLocalUsers. Cached SIDs are not re-resolved by name; missing accounts add no access. A boolean cannot recover a historical SID deleted/recreated before the first snapshot: review identities if uncertain.
+When ipc.accessMode has no explicit User value and legacy ipc.allowCodexSandboxClients is true, initial migration resolves only existing CodexSandboxOffline/Online identities, caches their SIDs, saves ipc.selectedUserSids and selectedUsers. Cached SIDs are not re-resolved by name; missing accounts add no access. A boolean cannot recover a historical SID deleted/recreated before the first snapshot: review identities if uncertain.
 
 An explicit mode overrides the legacy flag. False/unset stays ownerOnly. Ambiguous hand-edited selections or observed concurrent changes are not overwritten. The old flag remains compatible but new versions ignore it once mode is explicit; old running windows require updating/reloading to honor the modes.
 
 Operation permission switches update subsequent requests live. IPC trust changes and migration write User settings and restart the bridge, changing instance/epoch. Obtain any required deployment approval, pause dependent work and rediscover. No Host permission, account, credential, ACL policy or execution policy is changed by this workflow; dispatched effects are not undone.
+
+## Removed allLocalUsers mode
+
+Version 0.3.0 removed allLocalUsers. Under the Codex sandbox, the MCP server runs under your own Windows account, so ownerOnly covers that path. Use selectedUsers for any other account.
+
+If your User settings still contain allLocalUsers, the bridge does not fail. It runs as ownerOnly, writes one line to the output channel on each start, and shows a single notice per window session with a Configure IPC Access button. It does not rewrite your settings; change the value yourself to stop the notice. info and lswb_status report ipc.mode as ownerOnly, with ipc.requestedMode allLocalUsers and ipc.deprecatedModeIgnored true. Any other unknown value still stops the bridge with a setup error. The native helper rejects allLocalUsers.
 
 ## Design boundaries
 

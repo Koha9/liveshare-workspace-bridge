@@ -11,7 +11,7 @@
 | `agent.enabled` | `boolean` / `true` | ワークスペース操作の全体スイッチ。info/hostStatus と安全な診断は確認可能で、送信済み効果は戻しません。 | 後続要求に即時反映、Host バインド／参照も破棄。 |
 | `terminal.enabled` | `boolean` / `false` | Host API を許可しますが個別権限と検証済み共有 RW 端末も必要です。所有 bootstrap の作成／削除を伴い、通常 Guest shell を Host へ置換しません。 | 後続要求に即時反映、Host バインド／参照も破棄。 |
 | `powershell` | `string` / `""` | Guest ローカル IPC／アカウント補助プロセスの PowerShell 指定。空なら標準 Windows PowerShell。Host shell 選択や実行ポリシー変更ではありません。 | 次のローカル起動で反映。実行中を自動切替しません。 |
-| `ipc.accessMode` | `string` / `"ownerOnly"` | ownerOnly/allLocalUsers/selectedUsers。所有者は保持、追加は現在のローカル SAM と同 Windows session ID のみ。Everyone、グループ、全ドメインユーザーではなく DC は拒否。全プロセスを信頼し Codex ファイルシステム沙箱外ですが橋接権限に従います。 | IPC 再起動、新 instance/epoch。再検出。 |
+| `ipc.accessMode` | `string` / `"ownerOnly"` | ownerOnly/selectedUsers（0.3.0 で削除された allLocalUsers は ownerOnly として動作し、設定は書き換えません）。所有者は保持、追加は現在のローカル SAM と同 Windows session ID のみ。Everyone、グループ、全ドメインユーザーではなく DC は拒否。全プロセスを信頼し Codex ファイルシステム沙箱外ですが橋接権限に従います。 | IPC 再起動、新 instance/epoch。再検出。 |
 | `ipc.selectedUserSids` | `array` / `[]` | selectedUsers だけで使う安定 SID。重複なし最大256文字列、UI は形式、実装は1件184文字とローカル SAM 所属を検証。表示名変更は維持、削除再作成は非継承。 | IPC 再起動、新 instance/epoch。再検出。 |
 | `ipc.allowCodexSandboxClients` | `boolean` / `false` | 非推奨の互換設定。明示 User モードなしの true は既存二 sandbox SID を selectedUsers へ固定、false/未指定は ownerOnly。明示モード優先、全員／Host を自動有効化しません。初回 User 設定を移行し、過去に削除再作成された SID をブールから復元できません。 | IPC 再起動、新 instance/epoch。再検出。 |
 | `terminal.name` | `string` / `""` | 対象共有端末の正確な名前。空なら適格 PTY が一つ必要で、read-only 確認とバインドは別途実施。タイトルだけで shell/版は確定しません。 | Host バインドを破棄、次の許可済み呼出しで再接続。 |

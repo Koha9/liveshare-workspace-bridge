@@ -11,9 +11,9 @@
 | `agent.enabled` | `boolean` / `true` | 工作區操作總開關。info／hostStatus 與安全診斷資料仍可檢查；關閉不撤銷已派發效果。 | 後續即時生效，並使 Host 繫結／資源參照失效。 |
 | `terminal.enabled` | `boolean` / `false` | 允許 Host API，仍須單項權限及驗證共用 RW 終端。繫結可建立／刪除自有 bootstrap 暫存檔，不把一般 Guest shell 當 Host。 | 後續即時生效，並使 Host 繫結／資源參照失效。 |
 | `powershell` | `string` / `""` | Guest 本機 IPC／帳戶輔助程式 PowerShell 路徑；空值用系統 Windows PowerShell。不選 Host shell、不改執行策略。 | 下次本機橋接啟動使用，不自動切換目前程式。 |
-| `ipc.accessMode` | `string` / `"ownerOnly"` | ownerOnly／allLocalUsers／selectedUsers。擁有者始終保留，額外只限目前本機 SAM／同 Windows session ID，不是 Everyone、群組或全部網域使用者，網域控制站拒絕列舉。信任帳戶全部處理程序，超出 Codex 檔案系統沙箱但仍受橋接權限限制。 | 重啟 IPC、改變執行個體／epoch，需重新探索。 |
+| `ipc.accessMode` | `string` / `"ownerOnly"` | ownerOnly／selectedUsers（0.3.0 移除的 allLocalUsers 按 ownerOnly 執行，不改寫設定）。擁有者始終保留，額外只限目前本機 SAM／同 Windows session ID，不是 Everyone、群組或全部網域使用者，網域控制站拒絕列舉。信任帳戶全部處理程序，超出 Codex 檔案系統沙箱但仍受橋接權限限制。 | 重啟 IPC、改變執行個體／epoch，需重新探索。 |
 | `ipc.selectedUserSids` | `array` / `[]` | selectedUsers 專用穩定 SID，其他模式不依此授權。唯一清單最多 256 字串；UI 格式檢查，執行時每項最多 184 字元且驗證本機 SAM。名稱只顯示，改名保留，刪除重建不替代。 | 重啟 IPC、改變執行個體／epoch，需重新探索。 |
-| `ipc.allowCodexSandboxClients` | `boolean` / `false` | 已淘汰相容項。未明確 User 模式時，true 固定原兩個沙箱 SID 到 selectedUsers，false／未設定為 ownerOnly；明確模式優先。不自動 allLocalUsers 或開 Host。首次寫 User 設定，布林不能恢復快照前刪除重建的 SID。 | 重啟 IPC、改變執行個體／epoch，需重新探索。 |
+| `ipc.allowCodexSandboxClients` | `boolean` / `false` | 已淘汰相容項。未明確 User 模式時，true 固定原兩個沙箱 SID 到 selectedUsers，false／未設定為 ownerOnly；明確模式優先。不自動開 Host。首次寫 User 設定，布林不能恢復快照前刪除重建的 SID。 | 重啟 IPC、改變執行個體／epoch，需重新探索。 |
 | `terminal.name` | `string` / `""` | 目標共用終端精確名稱；空值需唯一合格共用 PTY，仍檢查唯讀並驗證繫結。標題非實際 shell／版本證明。 | Host 繫結失效，後續允許的呼叫重綁。 |
 | `terminal.hostWorkspacePath` | `string` / `""` | 可選 Host 根目錄；空值驗證共用 PowerShell 目前目錄與 Guest 根。非 Guest 本機路徑，hostBind 參數可覆蓋。 | Host 繫結失效，後續允許的呼叫重綁。 |
 | `terminal.commandTimeoutMs` | `integer` / `120000` / 1000..3600000 | Host 子命令預設毫秒期限；hostExec timeoutMs 可合法覆蓋。既有工作期限不變，非所有 IPC／握手逾時。 | Host 繫結失效，後續允許的呼叫重綁。 |
