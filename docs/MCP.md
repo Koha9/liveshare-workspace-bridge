@@ -117,13 +117,13 @@ Tools in the Host channel column run on the Live Share Host. They require all of
 
 Search and patches also need ripgrep and Git on the Host. By default, every request is typed into the shared terminal. The optional `host.transport: portForward` setting instead starts a foreground Host helper once and sends requests over a Live Share forwarded port. See [Settings](SETTINGS.md).
 
-## MCP, the CLI and the skill
+## MCP and the CLI
 
-- The MCP server is the supported agent interface.
-- The Codex skill (`$liveshare-workspace-bridge`) is the legacy interface. MCP will replace it.
-- `cli.cjs` remains available for diagnostics. The MCP server reuses its local transport internally.
+- The MCP server is the only agent interface. The Codex skill was removed in 0.3.0.
+- `cli.cjs` is a troubleshooting tool for people. It keeps `instances`, `diagnose` and pinned raw JSON requests. Its upload, download and apply-patch commands were removed; use `lswb_upload_file` and `lswb_apply_patch_file`.
+- The MCP server reuses the `cli.cjs` local transport internally.
 
-All three talk to the same extension over the same local pipe and follow the same permissions.
+Both talk to the same extension over the same local pipe and follow the same permissions.
 
 ## Known limitations
 

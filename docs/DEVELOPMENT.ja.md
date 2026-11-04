@@ -6,7 +6,6 @@ Windows、Node.js、確認済み Python 3 を使用します。実行は組込�
 
 ```text
 extension/                         Runtime, CLI and tests
-skills/liveshare-workspace-bridge/  Skill and self-contained client
 scripts/build.py                   Packaging and source checks
 docs/                              Current product/contributor guides
 dist/                              Ignored generated packages

@@ -2,6 +2,8 @@
 
 **English** | [简体中文](CHANGELOG.zh-CN.md) | [繁體中文](CHANGELOG.zh-TW.md) | [日本語](CHANGELOG.ja.md)
 
+- 0.3.0-pre — Removed the Codex skill; agents connect through the MCP server. The CLI keeps instances/diagnose/raw requests for troubleshooting.
+
 - 0.3.0-pre — Activation is now limited to `onFileSystem:vsls` and `onStartupFinished` instead of `*`.
 
 - 0.3.0-pre — The MCP server (`mcp-server.cjs`, `mcp-tools.cjs`) now ships in the VSIX, so the launcher and the VS Code registration work in the installed extension. The build fails if a packaged module requires a file that is not packaged. Copied MCP configuration uses forward-slash paths. New [MCP guide](MCP.md).
