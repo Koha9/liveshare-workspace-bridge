@@ -947,8 +947,10 @@ const HOST_OPERATION_TOOLS = [
     name: 'lswb_host_status',
     op: 'hostStatus',
     description: describe(
-      'Report whether the Host channel is available and bound for a workspace, plus eligible shared terminal candidates.',
-      'WHEN TO USE: Before any other Host tool, or after a host_channel_uncertain error.',
+      'Report whether the Host channel is available and bound for a workspace, plus eligible shared terminal candidates',
+      'and the portForward handshake (state idle, starting, waitingForward, bound, failed or cancelled, with hostPort, guestPort, message and code).',
+      'WHEN TO USE: Before any other Host tool, after a host_channel_uncertain error, and in portForward mode',
+      'repeatedly after lswb_host_bind until bound:true (or the handshake shows failed/cancelled). It answers immediately, even mid-handshake.',
       'Read-only. The Host channel needs the Host to share a read/write PowerShell terminal and terminal.enabled turned on.',
     ),
   }),
@@ -958,6 +960,10 @@ const HOST_OPERATION_TOOLS = [
     description: describe(
       'Bind the Host channel to the shared Host terminal for this workspace (a random handshake file verifies the Host root).',
       'WHEN TO USE: When lswb_host_status reports bound:false, or to recover after host_channel_uncertain.',
+      'In portForward mode this is step one of two: it returns bound:false with handshake.state waitingForward, hostPort and next',
+      'once the Host helper listens. Ask the Host to run "Live Share: Share Server" for hostPort, then poll lswb_host_status until bound.',
+      'Calling it again during the handshake only reports the same state. Other Host tools return host_handshake_pending meanwhile;',
+      'do not retry them to wait. After failed/cancelled, ask the Host to press Ctrl+C on any old helper before binding again.',
       'acknowledgeRecovery:true may only be used after the user has inspected the Host terminal and confirmed it is idle;',
       'no earlier command is ever replayed automatically.',
       HOST_NOTE,

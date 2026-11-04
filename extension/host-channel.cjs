@@ -20,6 +20,8 @@ const BANNER_TIMEOUT_MS = 30000;
 const SHUTDOWN_TIMEOUT_MS = 1000;
 const HANDSHAKE_ATTEMPT_MS = 1500;
 const OUTPUT_NAME = 'Live Share Workspace Bridge Host';
+const RECOVERY_HINT = 'Before binding again, ask the Host to press Ctrl+C in the shared terminal '
+  + 'if the previous Host helper is still running.';
 
 function readHostLimits(permissions) {
   const limits = {
@@ -87,7 +89,7 @@ function assertActionPermissions(permissions, op, action) {
 }
 
 function abortReason(reason) {
-  const passThrough = ['workspace_changed', 'host_channel_closed'];
+  const passThrough = ['workspace_changed', 'host_channel_closed', 'host_transport_changed'];
   const code = passThrough.includes(reason?.code) ? reason.code : 'host_access_revoked';
   return Object.assign(new Error(reason?.message || 'Host handshake stopped.'), { code, details: reason });
 }
@@ -101,7 +103,17 @@ function shutdownHelper(target) {
   return tcp.sendTcpRequest(request).then(() => {}, () => {});
 }
 
-function createHostChannel(vscode, identity, permissions) {
+function nextStepFor(hostPort) {
+  return `Ask the Host to run "Live Share: Share Server" for port ${hostPort}, then call lswb_host_status until bound. `
+    + 'Do not retry other Host tools to wait for the handshake. ' + RECOVERY_HINT;
+}
+
+/**
+ * @param internal Testing only: { handshakeTimeoutMs, handshakeIntervalMs }
+ *   override the handshake deadline and poll interval. Product code never
+ *   passes it; the deadline comes from host.handshakeTimeoutMinutes.
+ */
+function createHostChannel(vscode, identity, permissions, internal = {}) {
   const state = { pending: null, uncertain: false };
   const jobs = new Map();
   const transfers = new Map();
@@ -110,10 +122,15 @@ function createHostChannel(vscode, identity, permissions) {
   let queue = Promise.resolve();
   let disposed = false;
   let output = null;
-  let handshake = { state: 'idle', hostPort: null, guestPort: null, message: null };
+  let handshake = { state: 'idle', hostPort: null, guestPort: null, message: null, code: null };
+  // The forwarded-port handshake that runs after hostBind has returned.
+  let handshakeTask = null;
   const bindingKey = root => `${identity.epoch()}\n${root.toString()}`;
 
   function log(message) {
+    if (disposed) {
+      return;
+    }
     if (!output) {
       output = vscode.window.createOutputChannel?.(OUTPUT_NAME) || null;
     }
@@ -268,7 +285,7 @@ function createHostChannel(vscode, identity, permissions) {
       sha256: file.sha256,
       nonce,
     });
-    setHandshake({ state: 'starting', hostPort: null, guestPort: null, message: `Starting the Host helper (requested port ${requestedPort}).` });
+    setHandshake({ state: 'starting', hostPort: null, guestPort: null, code: null, message: `Starting the Host helper (requested port ${requestedPort}).` });
     try {
       await bootstrap.writeBootstrapFile(vscode, file, script);
       assertEpoch(expectedEpoch);
@@ -337,7 +354,8 @@ function createHostChannel(vscode, identity, permissions) {
         attempt,
         targetPort: () => guestPortFor(hostPort),
         notify,
-        timeoutMs: settings.handshakeTimeoutMinutes * 60000,
+        timeoutMs: internal.handshakeTimeoutMs ?? settings.handshakeTimeoutMinutes * 60000,
+        intervalMs: internal.handshakeIntervalMs,
         signal: controller.signal,
       });
     } finally {
@@ -347,39 +365,125 @@ function createHostChannel(vscode, identity, permissions) {
     }
   }
 
-  async function bindPortForward(root, options) {
-    const expectedEpoch = identity.epoch();
-    const terminal = terminalTransport.selectTerminal();
+  function setHandshakeFailure(error) {
+    const code = error.code || 'error';
+    setHandshake({
+      state: code === 'host_bind_cancelled' ? 'cancelled' : 'failed',
+      code,
+      message: `Host bind failed: ${code}: ${error.message} ${RECOVERY_HINT}`,
+    });
+  }
+
+  function finishHandshakeTask(task) {
+    if (handshakeTask === task) {
+      handshakeTask = null;
+    }
+  }
+
+  function installBinding(task, connected, expectedEpoch) {
+    finishHandshakeTask(task);
+    if (disposed) {
+      fail('host_channel_closed', 'Host channel closed during the handshake.');
+    }
+    assertEpoch(expectedEpoch);
+    binding = {
+      key: task.key,
+      root: task.root,
+      transport: 'tcp',
+      terminal: task.terminal,
+      port: connected.port,
+      token: task.token,
+      functionName: null,
+      chunkBytes: connected.hello.chunkBytes,
+      protocol: 3,
+    };
+    state.uncertain = false;
+    setHandshake({ state: 'bound', code: null, guestPort: connected.port, message: `Host helper connected on local port ${connected.port}.` });
+    vscode.window.showInformationMessage?.(`Live Share Workspace Bridge: Host helper connected on port ${connected.port}.`);
+  }
+
+  // Runs after hostBind has returned. Every outcome is recorded in the
+  // handshake status; the promise never rejects.
+  function startBackgroundHandshake(root, terminal, launched, expectedEpoch) {
+    const { banner, token, settings } = launched;
+    const task = { key: bindingKey(root), root: root.toString(), terminal, token, settled: null };
+    handshakeTask = task;
+    const handshakeDone = awaitHandshake(terminal, banner.port, token, settings);
+    task.settled = handshakeDone
+      .then(connected => installBinding(task, connected, expectedEpoch))
+      .catch(error => {
+        finishHandshakeTask(task);
+        setHandshakeFailure(error);
+      });
+    return task;
+  }
+
+  function pendingBindResult(task) {
+    return {
+      bound: false,
+      workspace: task.root,
+      terminal: task.terminal.name,
+      transport: 'portForward',
+      handshake: { ...handshake },
+      next: nextStepFor(handshake.hostPort),
+    };
+  }
+
+  function failHandshakePending() {
+    const port = handshake.hostPort;
+    const details = {
+      state: handshake.state,
+      hostPort: port,
+      guestPort: handshake.guestPort,
+      requestSent: false,
+      needsUser: true,
+    };
+    const message = `The Host helper is waiting for the Host to share port ${port} ("Live Share: Share Server"); `
+      + 'the request was not sent. Call lswb_host_status until bound instead of retrying this request.';
+    fail('host_handshake_pending', message, details);
+  }
+
+  async function launchForPortForward(root, terminal, options, expectedEpoch) {
     await shutdownHelper(clearBinding());
     try {
-      const { banner, token, settings } = await launchHelper(root, terminal, options, expectedEpoch);
+      const launched = await launchHelper(root, terminal, options, expectedEpoch);
       assertEpoch(expectedEpoch);
-      if (banner.protocol !== 3) {
+      if (launched.banner.protocol !== 3) {
         fail('host_protocol_mismatch', 'Unexpected Host helper protocol.');
       }
-      await warnIfLocalPortBusy(banner.port);
-      const connected = await awaitHandshake(terminal, banner.port, token, settings);
-      assertEpoch(expectedEpoch);
-      binding = {
-        key: bindingKey(root),
-        root: root.toString(),
-        transport: 'tcp',
-        terminal,
-        port: connected.port,
-        token,
-        functionName: null,
-        chunkBytes: connected.hello.chunkBytes,
-        protocol: 3,
-      };
-      state.uncertain = false;
-      setHandshake({ state: 'bound', guestPort: connected.port, message: `Host helper connected on local port ${connected.port}.` });
-      vscode.window.showInformationMessage?.(`Live Share Workspace Bridge: Host helper connected on port ${connected.port}.`);
-      return { bound: true, workspace: root.toString(), terminal: terminal.name, transport: 'portForward', port: connected.port, protocol: 3, chunkBytes: binding.chunkBytes };
+      await warnIfLocalPortBusy(launched.banner.port);
+      return launched;
     } catch (error) {
-      const cancelled = error.code === 'host_bind_cancelled';
-      setHandshake({ state: cancelled ? 'cancelled' : 'failed', message: `Host bind failed: ${error.code || 'error'}: ${error.message}` });
+      setHandshakeFailure(error);
       throw error;
     }
+  }
+
+  // Returns as soon as the helper is listening; the forwarded-port handshake
+  // continues in the background and is reported by status().
+  async function bindPortForward(root, options) {
+    if (handshakeTask) {
+      if (handshakeTask.key !== bindingKey(root)) {
+        failHandshakePending();
+      }
+      return pendingBindResult(handshakeTask);
+    }
+    const expectedEpoch = identity.epoch();
+    const terminal = terminalTransport.selectTerminal();
+    const launched = await launchForPortForward(root, terminal, options, expectedEpoch);
+    const task = startBackgroundHandshake(root, terminal, launched, expectedEpoch);
+    return pendingBindResult(task);
+  }
+
+  // A transport switch must not leave the helper handshake holding the
+  // terminal's pending slot while commands are typed there.
+  async function abortHandshakeForTransportSwitch() {
+    const task = handshakeTask;
+    if (!task) {
+      return;
+    }
+    state.pending?.reject({ code: 'host_transport_changed', message: 'host.transport changed while the Host helper handshake was waiting.' });
+    await task.settled;
   }
 
   async function bind(root, options = {}) {
@@ -390,6 +494,7 @@ function createHostChannel(vscode, identity, permissions) {
     if (readTransport(permissions) === 'portForward') {
       return bindPortForward(root, options);
     }
+    await abortHandshakeForTransportSwitch();
     // A running helper occupies the terminal; stop it before typing commands there.
     if (binding?.transport === 'tcp') {
       await shutdownHelper(clearBinding());
@@ -399,11 +504,14 @@ function createHostChannel(vscode, identity, permissions) {
 
   // workspace.cjs does not watch host.* settings, so a transport switch is
   // detected here and forces a fresh bind.
-  function dropBindingOnTransportSwitch() {
+  async function dropBindingOnTransportSwitch() {
+    const wantsTcp = readTransport(permissions) === 'portForward';
+    if (!wantsTcp) {
+      await abortHandshakeForTransportSwitch();
+    }
     if (!binding) {
       return;
     }
-    const wantsTcp = readTransport(permissions) === 'portForward';
     if (wantsTcp !== (binding.transport === 'tcp')) {
       shutdownHelper(clearBinding());
     }
@@ -418,9 +526,16 @@ function createHostChannel(vscode, identity, permissions) {
 
   async function perform(root, op, action, options = {}) {
     permissions.assert(op);
-    dropBindingOnTransportSwitch();
+    await dropBindingOnTransportSwitch();
+    if (handshakeTask) {
+      failHandshakePending();
+    }
     if (!isBound(root)) {
       await bind(root);
+    }
+    if (!isBound(root)) {
+      // A portForward auto-bind only started the handshake.
+      failHandshakePending();
     }
     if (state.uncertain) {
       fail('host_channel_uncertain', 'Host command outcome is unknown. Inspect the Host and explicitly recover the binding.');

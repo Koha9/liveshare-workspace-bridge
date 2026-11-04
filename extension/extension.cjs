@@ -136,11 +136,14 @@ function activate(context) {
           if (token !== generation || child !== current) throw Object.assign(new Error('IPC connection was replaced before dispatch.'), { code: 'transport_unavailable' });
           return currentApi.dispatch(frame.body);
         };
-        // Info only reports local state: discovery must remain usable while an
-        // old provider request is finishing. All workspace work stays queued.
-        const info = frame.body?.op === 'info';
-        const work = (info ? Promise.resolve() : dispatchQueue).then(dispatch);
-        if (!info) dispatchQueue = work.catch(() => {});
+        // info and hostStatus only report local state: discovery and Host
+        // handshake status must remain usable while an old request is
+        // finishing. All workspace work stays queued.
+        const readsLocalState = ['info', 'hostStatus'].includes(frame.body?.op);
+        const work = (readsLocalState ? Promise.resolve() : dispatchQueue).then(dispatch);
+        if (!readsLocalState) {
+          dispatchQueue = work.catch(() => {});
+        }
         response = { ok: true, result: await work };
       }
       catch (err) { response = { ok: false, error: { code: err.code || 'vscode_error', message: err.message, ...(err.details ? { details: err.details } : {}) } }; }

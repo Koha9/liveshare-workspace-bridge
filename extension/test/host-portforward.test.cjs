@@ -13,10 +13,31 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Fake Host helper speaking the host-server.ps1 line protocol.
-function fakeHost(t, getToken) {
+async function waitFor(predicate, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) {
+      throw new Error('Condition not reached in time.');
+    }
+    await delay(10);
+  }
+}
+
+function handshakeOf(f) {
+  return f.host.status(f.root).handshake;
+}
+
+// Fake Host helper speaking the host-server.ps1 line protocol. While
+// fake.accepting is false a connection closes without a reply, like Live
+// Share's local end before the Host has shared the port.
+function fakeHost(t, getToken, accepting = true) {
   const requests = [];
+  const fake = { port: null, requests, accepting };
   const server = net.createServer(socket => {
+    if (!fake.accepting) {
+      socket.destroy();
+      return;
+    }
     let buffer = '';
     socket.setEncoding('utf8');
     socket.on('error', () => {});
@@ -40,7 +61,10 @@ function fakeHost(t, getToken) {
   });
   t.after(() => new Promise(resolve => server.close(() => resolve())));
   return new Promise(resolve => {
-    server.listen(0, '127.0.0.1', () => resolve({ port: server.address().port, requests }));
+    server.listen(0, '127.0.0.1', () => {
+      fake.port = server.address().port;
+      resolve(fake);
+    });
   });
 }
 
@@ -121,20 +145,28 @@ function fixture(t, options = {}) {
     Uri: { joinPath: (root, name) => ({ toString: () => 'vsls:/' + name }) },
   };
   const permissions = createPermissions(vscode);
-  const host = createHostChannel(vscode, { epoch: () => 1 }, permissions);
+  const identity = { epochValue: 1, epoch: () => identity.epochValue };
+  const internal = { handshakeIntervalMs: 20, ...options.internal };
+  const host = createHostChannel(vscode, identity, permissions, internal);
   t.after(() => host.dispose());
   const root = { toString: () => 'vsls:/' };
-  return { settings, host, root, terminal, sent, messages, logs, events, scripts, tokenOf };
+  return { settings, host, root, terminal, sent, messages, logs, events, scripts, tokenOf, identity };
+}
+
+async function bindAndConnect(f) {
+  const result = await f.host.bind(f.root);
+  await waitFor(() => handshakeOf(f).state === 'bound');
+  return result;
 }
 
 test('portForward binds through a forwarded port and serves requests over TCP', async t => {
   let fake;
   const f = fixture(t, { bannerPort: () => fake.port });
   fake = await fakeHost(t, () => f.tokenOf());
-  const bound = await f.host.bind(f.root);
-  assert.equal(bound.bound, true);
-  assert.equal(bound.transport, 'portForward');
-  assert.equal(bound.port, fake.port);
+  const started = await bindAndConnect(f);
+  assert.equal(started.bound, false);
+  assert.equal(started.transport, 'portForward');
+  assert.equal(started.handshake.hostPort, fake.port);
 
   // Token only in the rendered file, never on the terminal line; the file is
   // removed with non-recursive flags once the banner arrived.
@@ -171,7 +203,7 @@ test('closing the terminal keeps a portForward binding; dispose sends shutdown',
   let fake;
   const f = fixture(t, { bannerPort: () => fake.port });
   fake = await fakeHost(t, () => f.tokenOf());
-  await f.host.bind(f.root);
+  await bindAndConnect(f);
   f.host.terminalClosed(f.terminal);
   assert.equal(f.host.status(f.root).bound, true);
   await f.host.request(f.root, 'hostStat', { action: 'stat', path: 'b.txt' });
@@ -181,15 +213,144 @@ test('closing the terminal keeps a portForward binding; dispose sends shutdown',
   assert.equal(fake.requests.at(-1).action, 'shutdown');
 });
 
-test('Cancel stops the handshake without marking the channel uncertain', async t => {
+test('hostBind returns waitingForward after the banner while the handshake continues', async t => {
+  let fake;
+  const f = fixture(t, { bannerPort: () => fake.port });
+  fake = await fakeHost(t, () => f.tokenOf(), false);
+  const started = await f.host.bind(f.root);
+  assert.equal(started.bound, false);
+  assert.equal(started.transport, 'portForward');
+  assert.equal(started.workspace, 'vsls:/');
+  assert.equal(started.handshake.state, 'waitingForward');
+  assert.equal(started.handshake.hostPort, fake.port);
+  assert.equal(started.handshake.guestPort, fake.port);
+  assert.match(started.next, new RegExp(`Live Share: Share Server.*port ${fake.port}`, 'u'));
+  assert.match(started.next, /lswb_host_status/u);
+  assert.ok(f.events.some(x => x.startsWith('delete:')));
+  assert.ok(f.messages.some(x => x.items?.includes('Cancel')));
+
+  // Status stays readable while the handshake is still polling.
+  await delay(60);
+  const waiting = f.host.status(f.root);
+  assert.equal(waiting.bound, false);
+  assert.equal(waiting.uncertain, false);
+  assert.equal(waiting.handshake.state, 'waitingForward');
+  assert.equal(waiting.handshake.hostPort, fake.port);
+
+  // A repeated bind reports the same handshake without guiding again.
+  const again = await f.host.bind(f.root);
+  assert.equal(again.bound, false);
+  assert.equal(again.handshake.state, 'waitingForward');
+  assert.equal(f.scripts.length, 1);
+  assert.equal(f.sent.length, 1);
+
+  // Other Host requests fail fast and send nothing.
+  const searches = () => fake.requests.filter(x => x.action === 'search').length;
+  await assert.rejects(f.host.request(f.root, 'search', { action: 'search', query: 'x' }), error => {
+    assert.equal(error.code, 'host_handshake_pending');
+    assert.equal(error.details.hostPort, fake.port);
+    assert.equal(error.details.requestSent, false);
+    assert.match(error.message, /lswb_host_status/u);
+    return true;
+  });
+  assert.equal(searches(), 0);
+  assert.equal(f.host.status(f.root).uncertain, false);
+
+  fake.accepting = true;
+  await waitFor(() => handshakeOf(f).state === 'bound');
+  const bound = f.host.status(f.root);
+  assert.equal(bound.bound, true);
+  assert.equal(bound.port, fake.port);
+  assert.ok(f.messages.some(x => x.message.includes(`connected on port ${fake.port}`)));
+  const reply = await f.host.request(f.root, 'search', { action: 'search', query: 'x' });
+  assert.equal(reply.action, 'search');
+  assert.equal(f.sent.length, 1);
+});
+
+test('an unbound Host request starts the helper once and returns host_handshake_pending', async t => {
+  let fake;
+  const f = fixture(t, { bannerPort: () => fake.port });
+  fake = await fakeHost(t, () => f.tokenOf(), false);
+  const search = () => f.host.request(f.root, 'search', { action: 'search', query: 'y' });
+  await assert.rejects(search(), { code: 'host_handshake_pending' });
+  assert.equal(handshakeOf(f).state, 'waitingForward');
+  await assert.rejects(search(), { code: 'host_handshake_pending' });
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.host.status(f.root).uncertain, false);
+});
+
+test('Cancel stops the handshake without marking the channel uncertain; the next bind guides again', async t => {
   const port = await closedPort();
   const f = fixture(t, { bannerPort: () => port, choice: 'Cancel' });
-  await assert.rejects(f.host.bind(f.root), { code: 'host_bind_cancelled' });
+  const started = await f.host.bind(f.root);
+  assert.equal(started.bound, false);
+  await waitFor(() => handshakeOf(f).state === 'cancelled');
   const status = f.host.status(f.root);
   assert.equal(status.uncertain, false);
   assert.equal(status.bound, false);
-  assert.equal(status.handshake.state, 'cancelled');
+  assert.equal(status.handshake.code, 'host_bind_cancelled');
+  assert.match(status.handshake.message, /Ctrl\+C/u);
   assert.ok(f.events.some(x => x.startsWith('delete:')));
+
+  await f.host.bind(f.root);
+  assert.equal(f.scripts.length, 2);
+  assert.equal(f.sent.length, 2);
+});
+
+test('a handshake timeout leaves a failed status and a later bind guides again', async t => {
+  const port = await closedPort();
+  const f = fixture(t, { bannerPort: () => port, internal: { handshakeTimeoutMs: 80 } });
+  await f.host.bind(f.root);
+  await waitFor(() => handshakeOf(f).state === 'failed');
+  const handshake = handshakeOf(f);
+  assert.equal(handshake.code, 'host_port_forward_required');
+  assert.match(handshake.message, /Ctrl\+C/u);
+  assert.equal(f.host.status(f.root).uncertain, false);
+  await f.host.bind(f.root);
+  assert.equal(f.sent.length, 2);
+});
+
+test('dispose aborts a background handshake and never installs a binding', async t => {
+  let fake;
+  const f = fixture(t, { bannerPort: () => fake.port });
+  fake = await fakeHost(t, () => f.tokenOf(), false);
+  await f.host.bind(f.root);
+  f.host.dispose();
+  await waitFor(() => handshakeOf(f).state === 'failed');
+  assert.equal(handshakeOf(f).code, 'host_channel_closed');
+  fake.accepting = true;
+  await delay(80);
+  assert.equal(f.host.status(f.root).bound, false);
+  assert.equal(fake.requests.length, 0);
+});
+
+test('a workspace change aborts a background handshake', async t => {
+  let fake;
+  const f = fixture(t, { bannerPort: () => fake.port });
+  fake = await fakeHost(t, () => f.tokenOf(), false);
+  await f.host.bind(f.root);
+  f.identity.epochValue = 2;
+  f.host.changed(true);
+  await waitFor(() => handshakeOf(f).state === 'failed');
+  assert.equal(handshakeOf(f).code, 'workspace_changed');
+  fake.accepting = true;
+  await delay(80);
+  assert.equal(f.host.status(f.root).bound, false);
+});
+
+test('switching to sharedTerminal during a handshake aborts it before using the terminal', async t => {
+  let fake;
+  const f = fixture(t, { bannerPort: () => fake.port });
+  fake = await fakeHost(t, () => f.tokenOf(), false);
+  await f.host.bind(f.root);
+  f.settings['host.transport'] = 'sharedTerminal';
+  const pending = f.host.request(f.root, 'hostStat', { action: 'stat', path: 'd.txt' });
+  await waitFor(() => f.sent.length === 2);
+  assert.equal(handshakeOf(f).state, 'failed');
+  assert.equal(handshakeOf(f).code, 'host_transport_changed');
+  assert.ok(f.sent[1].includes('-FunctionName'));
+  f.host.dispose();
+  await assert.rejects(pending);
 });
 
 test('a reported boot failure fails fast, deletes the bootstrap and is not uncertain', async t => {
@@ -203,7 +364,7 @@ test('switching back to sharedTerminal shuts the helper down before using the te
   let fake;
   const f = fixture(t, { bannerPort: () => fake.port });
   fake = await fakeHost(t, () => f.tokenOf());
-  await f.host.bind(f.root);
+  await bindAndConnect(f);
   f.settings['host.transport'] = 'sharedTerminal';
   const pending = f.host.request(f.root, 'hostStat', { action: 'stat', path: 'c.txt' });
   await delay(100);
