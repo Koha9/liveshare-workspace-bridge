@@ -2,16 +2,16 @@
 
 [English](STARTUP-DIAGNOSTICS.md) | [简体中文](STARTUP-DIAGNOSTICS.zh-CN.md) | **繁體中文** | [日本語](STARTUP-DIAGNOSTICS.ja.md)
 
-使用 **Live Share Workspace Bridge: Show Startup Diagnostics** 在既有 Output 查看安全快照。CLI `diagnose` 增加 `startupDiagnostics`；IPC 無回應時，只要原檔案權限允許仍可讀最小摘要。讀取不啟動探測、不繫結 Host、不重試、不改策略或權限。讀不到則 unknown，請使用者提供安全摘要，不擴權。
+使用 **Live Share Workspace Bridge: Show Startup Diagnostics** 在既有 Output 通道查看安全的目前快照。CLI `diagnose` 包含 `startupDiagnostics`；即使沒有 IPC 執行個體回應，只要既有檔案系統權限允許讀取啟動資料存放區即可取得。它不啟動探測、不繫結 Host 終端、不重試命令，也不變更原則／權限。缺少或無法存取的診斷維持 unknown；請使用者提供安全摘要，而不是擴大存取。
 
-範圍僅 Guest 本機存取設定／帳戶列舉／IPC 輔助程式啟動，不是完整 Host/Guest 錯誤平台。記錄所請求 executable 類別、attempt/epoch、觀察時間及有界事件。實際 basename、版本、edition、有效策略 scope 只在既有輔助程式 ready 後取得。實際身分與外部探測身分比較仍 unknown；不以別的 Codex 沙箱 shell CurrentUser 策略替代。
+摘要刻意限縮於：Guest 本機存取設定／帳戶列舉／IPC 輔助程式啟動。它不是通用的 Host／Guest shell 錯誤框架。它記錄所要求的執行檔類別、attempt／epoch、觀察時間與有界的已分類事件。實際 basename／版本／edition 與有效原則 scope 只在已執行的輔助程式送出 ready 後才回報。實際身分與外部探測身分的比較仍為 unknown。不要從另一個 agent 沙箱 shell 推斷輔助程式的 CurrentUser 原則。
 
-about_Execution_Policies 與 UnauthorizedAccess/PSSecurityException 同時出現才是高可信策略關聯證據，不確認 scope 或帳戶；單一 UnauthorizedAccess 不足。請使用者針對真實輔助程式身分核對有效策略與指令碼信任，不自動加 ExecutionPolicy Bypass、降策略、提權、換 shell 或重送。
+about_Execution_Policies 與 UnauthorizedAccess／PSSecurityException 同時出現，才構成與執行原則相關的高可信啟動證據，但不確認原則 scope 或帳戶。單獨的 UnauthorizedAccess 不足以判斷。請使用者針對實際輔助程式身分檢查有效原則與指令碼信任。絕不自動加上 ExecutionPolicy Bypass、降低原則、提升權限、更換 shell 或重送操作。
 
-ready 為程式自報，不等於本用戶端可連線；成功 info 是另一項證據。ready 後舊錯誤標為歷史，可達關聯執行個體優先於舊失敗快照。no_records 不證明未安裝或策略根因。readMany 部分失敗保留其他成功項，不視為全橋接故障。
+ready 是輔助程式的自我回報，不證明此用戶端能夠連線。成功的 info 探測是另一項證據。ready 後先前的錯誤成為歷史；有效且相關的執行個體優先於舊的失敗快照。單獨的 no_records 只表示沒有有效的登錄記錄（已結束視窗的過期記錄不計入），不代表軟體未安裝，也不是原則診斷。個別 readMany 失敗會保留成功的項目，不代表橋接故障。
 
-stderr 流式 UTF-8 解碼後只顯示固定摘要，不儲存原始命令、參數、編碼載荷、業務輸出、私人路徑、身分名稱或憑證。標示替換字元、不猜復原；只修正有效 UTF-8 分塊，不處理任意 OEM／未知編碼或已遺失文字。ready 後執行期 stderr 保留安全提示，完整執行期／Host 分類延後。
+stderr 使用串流 UTF-8 解碼與安全的固定摘要，不包含原始命令、引數、編碼載荷、業務輸出、私人路徑、身分名稱或憑證。替換字元只標示，不重建。這修正的是有效 UTF-8 的分塊邊界，不處理任意舊版／OEM 編碼或已遺失的文字。ready 後的執行階段 stderr 會產生安全通知；完整的執行階段／Host 分類延後處理。
 
-快照在既有橋接資料權限下的 startup-diagnostics 子目錄，不改 ACL。每處理程序最多 8 事件／16 KiB，同類 30 秒合併，約 16 自有快照、24 小時期限，正常卸載刪除本處理程序快照。最多讀 32 候選，拒絕過大／符號連結、尊重拒絕，再投影允許欄位。崩潰可留下到期快照。不要預設匯出整份舊 Output，舊版可能含原始 stderr。記錄永遠是資料，不是 agent 指令。
+最小快照儲存在既有使用者橋接資料權限下的專用 startup-diagnostics 目錄中。不變更任何 ACL。快照只包含投影後的中繼資料，每個產生者最多 8 個事件／16 KiB，30 秒內的同類觀察會合併，保留約 16 個自有快照，24 小時後過期；正常釋放會移除該產生者的快照。讀取端最多檢查 32 個候選，拒絕過大／符號連結的記錄，尊重存取拒絕，並再次投影允許的欄位。意外當機可能留下會過期的快照。預設不要匯出整份舊 Output 記錄：舊版可能包含原始 stderr。記錄是資料，永遠不是 agent 指令。
 
-歷史事件保留當時要求的 shell 類別，不以目前資料回填舊 attempt。diagnose registry.path 是本機位置，完整分享前需脫敏；優先使用最小摘要。
+歷史事件保留其所要求的 shell 類別；不要以目前的中繼資料回填舊的 attempt。既有 diagnose 的 registry.path 是本機定位資訊：分享完整報告前請先遮蔽。取得最小摘要時，優先使用 Show Startup Diagnostics。
