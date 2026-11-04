@@ -241,3 +241,19 @@ test('a terminal closed during the banner wait is not uncertain', async () => {
   await assert.rejects(waiting, { code: 'host_channel_closed' });
   assert.equal(state.uncertain, false);
 });
+
+test('waitingForward carries a message that asks the Host to share the port', async t => {
+  let fake;
+  const f = fixture(t, { bannerPort: () => fake.port });
+  fake = await fakeHost(t, () => f.tokenOf(), false);
+  const started = await f.host.bind(f.root);
+  const expected = new RegExp(`Live Share: Share Server.*port ${fake.port}`, 'u');
+  assert.equal(started.handshake.state, 'waitingForward');
+  assert.match(started.handshake.message, expected);
+  assert.doesNotMatch(started.handshake.message, /Starting the Host helper/u);
+  const waiting = handshakeOf(f);
+  assert.equal(waiting.state, 'waitingForward');
+  assert.doesNotMatch(waiting.message, /Starting the Host helper/u);
+  const prompts = f.logs.filter(line => expected.test(line));
+  assert.equal(prompts.length, 1);
+});
