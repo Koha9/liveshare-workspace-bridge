@@ -2,6 +2,8 @@
 
 [English](CHANGELOG.md) | [简体中文](CHANGELOG.zh-CN.md) | [繁體中文](CHANGELOG.zh-TW.md) | **日本語**
 
+[ドキュメント](README.ja.md)
+
 - 0.3.0
   - アップグレード時の注意：`terminal.*` 設定は `host.*` になりました。新しいキーが未設定の間は旧 User 値を 1 版の間読み取り続けますが、何も書き換えないため、名前は自分で変更してください。保存済みの `allLocalUsers` IPC モードは、通知を一度表示して ownerOnly として動作します。Codex skill はなくなりました。**Copy MCP Server Configuration** で MCP サーバーを agent に追加してください。Host 機能では、ブリッジに表示されたヘルパーポートに対して Host が "Live Share: Share Server" を一度実行する必要があります。VS Code 1.101 以降が必要です。
   - 追加：36 個の `lswb_` ツールを持つ MCP stdio サーバーを VSIX に同梱（`mcp-server.cjs`、`mcp-tools.cjs`）。実行中の拡張バージョンに追従する `~/.liveshare-local/mcp-server.cjs` の安定ランチャーと、**Copy MCP Server Configuration** コマンド。コピーされる構成はスラッシュ区切りのパスを使います。パッケージ化されたモジュールがパッケージに含まれないファイルを require するとビルドが失敗します。新しい [MCP ガイド](MCP.ja.md)。

@@ -2,6 +2,7 @@
 
 [English](IPC-SECURITY.md) | **简体中文** | [繁體中文](IPC-SECURITY.zh-TW.md) | [日本語](IPC-SECURITY.ja.md)
 
+[文档](README.zh-CN.md)
 
 通过 **Live Share Workspace Bridge: Configure IPC Access** 配置英文 User 设置。只有明确的 User 值控制信任；工作区设置和扩展提供的默认值不能扩大信任。
 

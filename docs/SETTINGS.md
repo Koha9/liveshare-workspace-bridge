@@ -2,6 +2,8 @@
 
 **English** | [简体中文](SETTINGS.zh-CN.md) | [繁體中文](SETTINGS.zh-TW.md) | [日本語](SETTINGS.ja.md)
 
+[Documentation](README.md)
+
 This reference describes the current repository schema; the installed release can expose fewer/different commands. Use its version, Settings UI and matching release assets as the authority. All keys below have prefix liveshareWorkspaceBridge. and schema scope machine (User/Remote settings as VS Code permits, not Workspace/Folder). The UI extension runs on the Windows Guest: changing Host machine settings is not the same. IPC trust reads explicit User global values and ignores workspace/contributed defaults.
 
 ## General, IPC and Host parameters

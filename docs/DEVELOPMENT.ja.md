@@ -2,6 +2,8 @@
 
 [English](DEVELOPMENT.md) | [简体中文](DEVELOPMENT.zh-CN.md) | [繁體中文](DEVELOPMENT.zh-TW.md) | **日本語**
 
+[ドキュメント](README.ja.md)
+
 Windows、Node.js、確認済みの Python 3 が必要です。実行時は組み込みモジュール、Windows PowerShell、同梱の C# ソースを使い、npm 依存はありません。パッケージ作成は Python 標準ライブラリだけを使います。テストは `extension/package.json` で宣言された devDependencies（MCP SDK 相互運用テスト）を使います。`npm test` の前に `extension/` 内で `npm ci` を一度実行してください。
 
 ```text

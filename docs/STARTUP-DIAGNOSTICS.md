@@ -2,6 +2,8 @@
 
 **English** | [简体中文](STARTUP-DIAGNOSTICS.zh-CN.md) | [繁體中文](STARTUP-DIAGNOSTICS.zh-TW.md) | [日本語](STARTUP-DIAGNOSTICS.ja.md)
 
+[Documentation](README.md)
+
 Use **Live Share Workspace Bridge: Show Startup Diagnostics** for a safe current snapshot in the existing Output channel. CLI `diagnose` includes `startupDiagnostics`, even when no IPC instance answered, provided existing filesystem permissions allow reading the startup store. It does not start probes, bind Host terminals, retry commands or change policy/permissions. Missing/inaccessible diagnostics remain unknown; request a user-provided safe summary instead of widening access.
 
 The summary is intentionally narrow: Guest-local access setup/account-enumeration/IPC helper startup. It is not a universal Host/Guest shell error framework. It records requested executable category, attempt/epoch, observation times and bounded classified events. Actual basename/version/edition and effective policy scopes are reported only after the already-running helper sends ready. Actual/external-probe identity comparison remains unknown. Do not infer a helper's CurrentUser policy from a separate agent sandbox shell.

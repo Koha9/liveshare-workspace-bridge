@@ -2,6 +2,8 @@
 
 [English](CHANGELOG.md) | **简体中文** | [繁體中文](CHANGELOG.zh-TW.md) | [日本語](CHANGELOG.ja.md)
 
+[文档](README.zh-CN.md)
+
 - 0.3.0
   - 升级注意事项：`terminal.*` 设置已改为 `host.*`；新键未设置时，旧键的 User 值仍会读取一个版本，设置不会被改写，请自行改名。已保存的 `allLocalUsers` IPC 模式按 ownerOnly 运行，并提示一次。Codex skill 已移除：请用 **Copy MCP Server Configuration** 把 MCP server 添加到你的 agent。Host 功能现在需要 Host 为桥接显示的 helper 端口运行一次 "Live Share: Share Server"。需要 VS Code 1.101 或更高版本。
   - 新增：MCP stdio server，提供 36 个 `lswb_` 工具，随 VSIX 发布（`mcp-server.cjs`、`mcp-tools.cjs`）；固定路径启动器 `~/.liveshare-local/mcp-server.cjs`，跟随当前运行的扩展版本；以及 **Copy MCP Server Configuration** 命令。复制的配置使用正斜杠路径。若打包的模块 require 了未打包的文件，构建会失败。新增 [MCP 指南](MCP.zh-CN.md)。

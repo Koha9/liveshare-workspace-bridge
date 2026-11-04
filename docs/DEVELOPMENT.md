@@ -2,6 +2,8 @@
 
 **English** | [简体中文](DEVELOPMENT.zh-CN.md) | [繁體中文](DEVELOPMENT.zh-TW.md) | [日本語](DEVELOPMENT.ja.md)
 
+[Documentation](README.md)
+
 Windows, Node.js and confirmed Python 3 are required. Runtime uses built-in modules, Windows PowerShell and the bundled C# sources, with no npm dependencies; packaging uses Python standard library only. Tests use the devDependencies declared in `extension/package.json` (the MCP SDK interop test): run `npm ci` inside `extension/` once before `npm test`.
 
 ```text

@@ -1,6 +1,6 @@
 # MCP 伺服器
 
-[English](MCP.md) | **繁體中文**
+[English](MCP.md) | [简体中文](MCP.zh-CN.md) | **繁體中文** | [日本語](MCP.ja.md)
 
 [文件](README.zh-TW.md)
 

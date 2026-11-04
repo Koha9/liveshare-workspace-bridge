@@ -2,6 +2,8 @@
 
 [English](STARTUP-DIAGNOSTICS.md) | [简体中文](STARTUP-DIAGNOSTICS.zh-CN.md) | [繁體中文](STARTUP-DIAGNOSTICS.zh-TW.md) | **日本語**
 
+[ドキュメント](README.ja.md)
+
 **Live Share Workspace Bridge: Show Startup Diagnostics** で、既存の Output チャネルに安全な現在のスナップショットを表示します。CLI `diagnose` は、既存のファイルシステム権限で起動記録ストアを読める限り、IPC インスタンスが応答しなくても `startupDiagnostics` を含めます。プローブの開始、Host 端末のバインド、コマンドの再試行、ポリシー／権限の変更は行いません。診断がない／読めない場合は unknown のままとし、アクセスを広げる代わりにユーザーに安全な要約を依頼します。
 
 要約の対象は意図的に狭く、Guest ローカルのアクセス設定／アカウント列挙／IPC ヘルパー起動だけです。Host/Guest シェルエラー全般の枠組みではありません。要求された executable の分類、attempt/epoch、観測時刻、上限付きの分類済みイベントを記録します。実際の basename/version/edition と実効ポリシーの scope は、すでに実行中のヘルパーが ready を送った後にだけ報告されます。実際の身元と外部プローブの身元の比較は unknown のままです。ヘルパーの CurrentUser ポリシーを、別の agent サンドボックスのシェルから推測しないでください。

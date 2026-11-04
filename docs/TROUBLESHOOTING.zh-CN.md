@@ -18,7 +18,7 @@ broken pipe 清理：客户端超时后，失败的迟到响应不再让监听�
 
 之前已 ready 的 IPC 辅助进程退出后，会在 1／2／4 秒后重启，最多三次不稳定重启；ready 运行满一分钟后重置次数。不需要焦点事件或 Host 轮询。启动／策略／访问失败和显式 Stop 不会自动重启。传输恢复保留 instance／epoch、Host 任务和不确定状态，串行化进行中的工作，绝不重放已发送的操作。
 
-如果仍然断开，检查 `lswb_status`（如果是人工排查，可运行一次 CLI `diagnose`）。在任务授权的恢复中，agent 可以在目标 Guest 窗口通过命令面板调用 **Live Share Workspace Bridge: Restart Connection**（`liveshareWorkspaceBridge.restart`）：按 Ctrl+Shift+P，或按 Ctrl+P 后输入 `>`。没有支持的 UI 工具时，只询问用户一次。手动重启会改变 instance／epoch，并使 Host 任务／传输句柄失效；按根目录名称和完整 URI 重新发现一次。Host 不确定状态仍然保留：确认之前先确认 Host 已恢复。不要绕过被拒绝的访问、策略失败或有意的 Stop，也不要重放未知结果的修改。IPC 恢复不会重新加入 Live Share，也不会修复缺失的 Host 终端。
+如果仍然断开，检查 `lswb_status`（如果是人工排查，可运行一次 CLI `diagnose`）。在任务授权的恢复中，agent 可以在目标 Guest 窗口通过命令面板调用 **Live Share Workspace Bridge: Restart Connection**（`liveshareWorkspaceBridge.restart`）：按 Ctrl+Shift+P，或按 Ctrl+P 后输入 `>`。没有支持的 UI 工具时，只询问用户一次。手动重启会改变 instance／epoch，并使 Host 任务／传输句柄失效；按根目录名称和完整 URI 重新发现一次。Host 不确定状态仍然保留：先确认 Host 已恢复，再回报恢复完成（acknowledgeRecovery）。不要绕过被拒绝的访问、策略失败或有意的 Stop，也不要重放未知结果的修改。IPC 恢复不会重新加入 Live Share，也不会修复缺失的 Host 终端。
 
 ## Host 终端缺失或无响应
 

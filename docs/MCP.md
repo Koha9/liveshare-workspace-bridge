@@ -1,5 +1,7 @@
 # MCP server
 
+**English** | [简体中文](MCP.zh-CN.md) | [繁體中文](MCP.zh-TW.md) | [日本語](MCP.ja.md)
+
 [Documentation](README.md)
 
 Live Share Workspace Bridge ships a Model Context Protocol (MCP) server. Your agent starts it as a local stdio process on the Guest machine. The server reaches the running VS Code extension through the bridge's local Windows named pipe and opens no network ports.

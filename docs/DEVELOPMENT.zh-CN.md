@@ -2,6 +2,8 @@
 
 [English](DEVELOPMENT.md) | **简体中文** | [繁體中文](DEVELOPMENT.zh-TW.md) | [日本語](DEVELOPMENT.ja.md)
 
+[文档](README.zh-CN.md)
+
 需要 Windows、Node.js 和已确认的 Python 3。运行时使用内置模块、Windows PowerShell 和随包 C# 源码，没有 npm 依赖；打包只依赖 Python 标准库。测试使用 `extension/package.json` 中声明的 devDependencies（MCP SDK 互通测试）：运行 `npm test` 之前先在 `extension/` 中执行一次 `npm ci`。
 
 ```text
