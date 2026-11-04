@@ -2,7 +2,7 @@
 name: liveshare-workspace-bridge
 description: "Read, edit, search, and save a connected Windows VS Code Live Share Guest (vsls:) workspace through Live Share Workspace Bridge. Use for Live Share virtual projects; ordinary local-disk repositories use native tools. Optional Host operations require its verified Host channel."
 metadata:
-  version: "0.2.4"
+  version: "0.3.0-pre"
 ---
 
 # Live Share Workspace Bridge

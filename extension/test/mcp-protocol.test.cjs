@@ -248,9 +248,9 @@ test('a live bridge instance is listed as a ready workspace', { skip: process.pl
   const registryDir = makeTempRegistry(t);
   const id = crypto.randomUUID();
   const roots = [{ name: 'proj', uri: 'vsls:/' }];
-  const pipeName = await startFakeBridge(t, { id, epoch: 2, version: '0.2.4', roots });
+  const pipeName = await startFakeBridge(t, { id, epoch: 2, version: PACKAGE_VERSION, roots });
   fs.mkdirSync(registryDir, { recursive: true });
-  const record = { id, pipeName, epoch: 1, version: '0.2.4', pid: process.pid };
+  const record = { id, pipeName, epoch: 1, version: PACKAGE_VERSION, pid: process.pid };
   fs.writeFileSync(path.join(registryDir, `${id}.json`), JSON.stringify(record));
   const session = startServer(t, registryDir);
 
@@ -259,7 +259,7 @@ test('a live bridge instance is listed as a ready workspace', { skip: process.pl
   const structured = call.result.structuredContent;
   assert.equal(structured.status, 'ready');
   assert.deepEqual(structured.workspaces, [
-    { instance: id, epoch: 2, version: '0.2.4', pid: process.pid, roots },
+    { instance: id, epoch: 2, version: PACKAGE_VERSION, pid: process.pid, roots },
   ]);
   assert.equal(structured.probes[0].status, 'connected');
   assert.deepEqual(structured.issues, []);

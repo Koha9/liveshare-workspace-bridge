@@ -2,7 +2,7 @@
   "name": "liveshare-workspace-bridge",
   "displayName": "Live Share Workspace Bridge",
   "description": "Edit Live Share workspaces with permission controls and an optional verified Host PowerShell bridge, without ports or copied tokens.",
-  "version": "0.2.4",
+  "version": "0.3.0-pre",
   "publisher": "Koha9-Lee",
   "license": "MIT",
   "repository": {
