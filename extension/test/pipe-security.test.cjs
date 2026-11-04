@@ -9,3 +9,37 @@ test('local pipe excludes broad principals, holds its sole server instance and r
  assert.ok(r.rules.some(x=>x.sid==='S-1-5-2'&&x.type==='Deny'));assert.ok(r.rules.some(x=>x.sid===r.owner&&x.type==='Allow'&&x.rights==='FullControl'));
  assert.ok(r.accounts.every(x=>/^S-1-5-21-/u.test(x)));
 });
+function runPowerShell(args){
+ const exe=path.join(process.env.SystemRoot,'System32/WindowsPowerShell/v1.0/powershell.exe');
+ return new Promise((resolve,reject)=>{
+  const child=spawn(exe,['-NoLogo','-NoProfile','-NonInteractive',...args],{windowsHide:true});
+  let stdout='';
+  let stderr='';
+  child.stdout.on('data',x=>stdout+=x);
+  child.stderr.on('data',x=>stderr+=x);
+  child.once('error',reject);
+  child.once('close',code=>resolve({code,stdout,stderr}));
+ });
+}
+test('native pipe and helper reject the removed allLocalUsers mode',{skip:process.platform!=='win32',timeout:15000},async()=>{
+ const source=path.join(__dirname,'..','pipe-security.cs').replaceAll("'","''");
+ const accounts=source.replace('pipe-security.cs','local-accounts.cs');
+ const lines=[
+  "$ErrorActionPreference='Stop'",
+  `Add-Type -Path @('${accounts}','${source}')`,
+  "$name='liveshare-local-123-'+[Guid]::NewGuid().ToString()",
+  "$rejected=$false",
+  "try{$pipe=[LswbIpcV022.LocalPipe]::new($name,'allLocalUsers',[string[]]@());$pipe.Dispose()}catch{$rejected=$true}",
+  "[Console]::WriteLine($(if($rejected){'REMOVED_REJECTED'}else{'REMOVED_ACCEPTED'}))",
+ ];
+ const encoded=Buffer.from(lines.join('\n'),'utf16le').toString('base64');
+ const native=await runPowerShell(['-EncodedCommand',encoded]);
+ assert.equal(native.code,0,native.stderr);
+ assert.match(native.stdout,/REMOVED_REJECTED/);
+ const helper=path.join(__dirname,'..','pipe-host.ps1');
+ const pipeName='liveshare-local-123-'+require('node:crypto').randomUUID();
+ const hosted=await runPowerShell(['-File',helper,'-PipeName',pipeName,'-AccessMode','allLocalUsers']);
+ assert.notEqual(hosted.code,0);
+ assert.match(hosted.stderr,/AccessMode/);
+ assert.doesNotMatch(hosted.stdout,/"kind":"ready"/);
+});

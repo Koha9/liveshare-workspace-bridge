@@ -30,6 +30,8 @@ namespace LswbIpcV022 {
     public readonly string Mode;
     public LocalPipe(string pipeName, string accessMode, string[] selectedUserSids) {
       if (!System.Text.RegularExpressions.Regex.IsMatch(pipeName, @"\Aliveshare-local-\d+-[a-f0-9-]+\z")) throw new ArgumentException("Invalid bridge pipe name.");
+      // Reject before any account read or pipe creation; allLocalUsers was removed in 0.3.0.
+      if (accessMode != "ownerOnly" && accessMode != "selectedUsers") throw new ArgumentException("Unknown IPC access mode.");
       Mode=accessMode;
       SessionId=Process.GetCurrentProcess().SessionId;
       SecurityIdentifier owner=WindowsIdentity.GetCurrent().User;
