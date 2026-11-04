@@ -1,163 +1,16 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const net = require('node:net');
-const { createPermissions } = require('../permissions.cjs');
-const { createHostChannel } = require('../host-channel.cjs');
 const bootstrap = require('../host-bootstrap.cjs');
-
-const TOKEN_PATTERN = /\[string\]\$Token = '([A-Za-z0-9_-]+)'/u;
-const BOOT_NONCE = /'LSWB_BOOT_FAILED:'\+'([a-f0-9]{32})'/u;
-
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function waitFor(predicate, timeoutMs = 3000) {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() > deadline) {
-      throw new Error('Condition not reached in time.');
-    }
-    await delay(10);
-  }
-}
-
-function handshakeOf(f) {
-  return f.host.status(f.root).handshake;
-}
-
-// Fake Host helper speaking the host-server.ps1 line protocol. While
-// fake.accepting is false a connection closes without a reply, like Live
-// Share's local end before the Host has shared the port.
-function fakeHost(t, getToken, accepting = true) {
-  const requests = [];
-  const fake = { port: null, requests, accepting };
-  const server = net.createServer(socket => {
-    if (!fake.accepting) {
-      socket.destroy();
-      return;
-    }
-    let buffer = '';
-    socket.setEncoding('utf8');
-    socket.on('error', () => {});
-    socket.on('data', chunk => {
-      buffer += chunk;
-      if (!buffer.includes('\n')) {
-        return;
-      }
-      const request = JSON.parse(buffer.slice(0, buffer.indexOf('\n')));
-      requests.push(request);
-      if (request.token !== getToken()) {
-        socket.end(JSON.stringify({ ok: false, error: { code: 'host_token_rejected', message: 'no' } }) + '\n');
-        return;
-      }
-      let result = { complete: true, action: request.action };
-      if (request.action === 'hello') {
-        result = { protocol: 3, transport: 'tcp', chunkBytes: 32768 };
-      }
-      socket.end(JSON.stringify({ nonce: request.nonce, ok: true, result }) + '\n');
-    });
-  });
-  t.after(() => new Promise(resolve => server.close(() => resolve())));
-  return new Promise(resolve => {
-    server.listen(0, '127.0.0.1', () => {
-      fake.port = server.address().port;
-      resolve(fake);
-    });
-  });
-}
-
-async function closedPort() {
-  const server = net.createServer();
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  const { port } = server.address();
-  await new Promise(resolve => server.close(resolve));
-  return port;
-}
-
-function fixture(t, options = {}) {
-  const settings = { 'terminal.enabled': true, 'host.transport': 'portForward', ...options.settings };
-  const listeners = new Set();
-  const events = [];
-  const sent = [];
-  const messages = [];
-  const logs = [];
-  const scripts = [];
-  const emit = text => {
-    for (const callback of listeners) {
-      callback(text);
-    }
-  };
-  const tokenOf = () => TOKEN_PATTERN.exec(scripts.at(-1) || '')?.[1];
-  const respondToLaunch = nonce => {
-    if (options.mode === 'bootFail') {
-      const encoded = Buffer.from(JSON.stringify({ message: 'host_port_unavailable: No free loopback port.' })).toString('base64');
-      emit(`\r\nLSWB_BOOT_FAILED:${nonce}:${encoded}\r\nLSWB_END:${nonce}\r\n`);
-      return;
-    }
-    const banner = JSON.stringify({ port: options.bannerPort(), protocol: 3, token: tokenOf().slice(0, 8) });
-    events.push('banner');
-    emit('\x1b]0;pwsh\x07LSWB_LISTEN\r\nING:' + banner + '\r\nLive Share Workspace Bridge host helper listening.\r\n');
-  };
-  const pty = {
-    handleInput() {},
-    onDidWrite(callback) {
-      listeners.add(callback);
-      return { dispose: () => listeners.delete(callback) };
-    },
-  };
-  const terminal = {
-    name: 'powershell [Shared]',
-    creationOptions: { pty },
-    sendText(command) {
-      sent.push(command);
-      const match = BOOT_NONCE.exec(command);
-      if (match) {
-        setTimeout(() => respondToLaunch(match[1]), 1);
-      }
-    },
-  };
-  const vscode = {
-    window: {
-      terminals: [terminal],
-      showInformationMessage(message, ...items) {
-        messages.push({ message, items });
-        return options.choice ? Promise.resolve(options.choice) : new Promise(() => {});
-      },
-      showWarningMessage(message) {
-        messages.push({ message, warning: true });
-      },
-      createOutputChannel: () => ({ appendLine: line => logs.push(line), dispose() {} }),
-    },
-    workspace: {
-      getConfiguration: () => ({ get: key => settings[key] }),
-      fs: {
-        async writeFile(uri, bytes) {
-          scripts.push(Buffer.from(bytes).toString('utf8'));
-          events.push('write');
-        },
-        async delete(uri, flags) {
-          events.push('delete:' + uri.toString() + ':' + JSON.stringify(flags));
-        },
-      },
-    },
-    Uri: { joinPath: (root, name) => ({ toString: () => 'vsls:/' + name }) },
-  };
-  const permissions = createPermissions(vscode);
-  const identity = { epochValue: 1, epoch: () => identity.epochValue };
-  const internal = { handshakeIntervalMs: 20, ...options.internal };
-  const host = createHostChannel(vscode, identity, permissions, internal);
-  t.after(() => host.dispose());
-  const root = { toString: () => 'vsls:/' };
-  return { settings, host, root, terminal, sent, messages, logs, events, scripts, tokenOf, identity };
-}
-
-async function bindAndConnect(f) {
-  const result = await f.host.bind(f.root);
-  await waitFor(() => handshakeOf(f).state === 'bound');
-  return result;
-}
+const {
+  delay,
+  waitFor,
+  handshakeOf,
+  fakeHost,
+  closedPort,
+  fixture,
+  bindAndConnect,
+} = require('./host-fixtures.cjs');
 
 test('portForward binds through a forwarded port and serves requests over TCP', async t => {
   let fake;
@@ -338,48 +191,11 @@ test('a workspace change aborts a background handshake', async t => {
   assert.equal(f.host.status(f.root).bound, false);
 });
 
-test('switching to sharedTerminal during a handshake aborts it before using the terminal', async t => {
-  let fake;
-  const f = fixture(t, { bannerPort: () => fake.port });
-  fake = await fakeHost(t, () => f.tokenOf(), false);
-  await f.host.bind(f.root);
-  f.settings['host.transport'] = 'sharedTerminal';
-  const pending = f.host.request(f.root, 'hostStat', { action: 'stat', path: 'd.txt' });
-  await waitFor(() => f.sent.length === 2);
-  assert.equal(handshakeOf(f).state, 'failed');
-  assert.equal(handshakeOf(f).code, 'host_transport_changed');
-  assert.ok(f.sent[1].includes('-FunctionName'));
-  f.host.dispose();
-  await assert.rejects(pending);
-});
-
 test('a reported boot failure fails fast, deletes the bootstrap and is not uncertain', async t => {
   const f = fixture(t, { mode: 'bootFail' });
   await assert.rejects(f.host.bind(f.root), { code: 'host_port_unavailable' });
   assert.equal(f.host.status(f.root).uncertain, false);
   assert.ok(f.events.some(x => x.startsWith('delete:')));
-});
-
-test('switching back to sharedTerminal shuts the helper down before using the terminal', async t => {
-  let fake;
-  const f = fixture(t, { bannerPort: () => fake.port });
-  fake = await fakeHost(t, () => f.tokenOf());
-  await bindAndConnect(f);
-  f.settings['host.transport'] = 'sharedTerminal';
-  const pending = f.host.request(f.root, 'hostStat', { action: 'stat', path: 'c.txt' });
-  await delay(100);
-  assert.equal(fake.requests.at(-1).action, 'shutdown');
-  assert.equal(f.sent.length, 2);
-  assert.ok(f.sent[1].includes('-FunctionName'));
-  f.host.dispose();
-  await assert.rejects(pending);
-});
-
-test('an unknown transport value is a configuration error', async t => {
-  const f = fixture(t, { settings: { 'host.transport': 'carrierPigeon' } });
-  await assert.rejects(f.host.bind(f.root), { code: 'invalid_configuration' });
-  assert.equal(f.host.status(f.root).transport, null);
-  assert.equal(f.sent.length, 0);
 });
 
 function silentTerminal() {

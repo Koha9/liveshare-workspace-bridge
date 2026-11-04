@@ -81,12 +81,3 @@ test('boot failure frames keep the Host error code and fall back to host_boot_fa
   });
   assert.equal(bootstrap.parseBootFailure(frame('x'), 'c'.repeat(32)), null);
 });
-
-test('result frames decode as before and reject invalid encodings', () => {
-  const nonce = 'd'.repeat(32);
-  const encoded = Buffer.from(JSON.stringify({ ok: true, result: { protocol: 2 } })).toString('base64');
-  const compact = bootstrap.compactTerminalText(`LSWB_RESULT:${nonce}:${encoded}\r\nLSWB_END:${nonce}`);
-  assert.deepEqual(bootstrap.parseResultFrame(compact, nonce), { ok: true, result: { protocol: 2 } });
-  assert.equal(bootstrap.parseResultFrame(`LSWB_RESULT:${nonce}:abcd`, nonce), null);
-  assert.throws(() => bootstrap.parseResultFrame(`LSWB_RESULT:${nonce}:abc*LSWB_END:${nonce}`, nonce), /encoding/u);
-});

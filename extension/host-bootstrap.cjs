@@ -1,14 +1,13 @@
 'use strict';
-// Host bootstrap: renders the single-file Host scripts, writes the one-time
-// bootstrap file into the shared workspace, builds the shared-terminal command
-// and reads one framed reply from terminal output. Workspace files are only
+// Host bootstrap: renders the single-file Host helper, writes the one-time
+// bootstrap file into the shared workspace, builds the shared-terminal launch
+// command and reads the helper's listening or boot-failure frame. Workspace files are only
 // touched through vscode.workspace.fs, never through Node fs.
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
 const LEGACY_NAMESPACE = 'LswbHostV020';
-const CORE_MARKER = '#__LSWB_HOST_CORE__#';
 const IMPORT_BEGIN = '#__LSWB_IMPORT_CORE_BEGIN__#';
 const IMPORT_END = '#__LSWB_IMPORT_CORE_END__#';
 const RUNTIME_PLACEHOLDER = '__RUNTIME_BASE64__';
@@ -52,18 +51,6 @@ function runtimeParts() {
   const namespace = 'LswbHost' + sha256Hex(runtime).slice(0, 12);
   const rewritten = runtime.replaceAll(LEGACY_NAMESPACE, namespace);
   return { namespace, base64: Buffer.from(rewritten).toString('base64') };
-}
-
-function renderBootstrap() {
-  const { namespace, base64 } = runtimeParts();
-  const core = readExtensionFile('host-core.ps1');
-  const actions = readExtensionFile('host-actions.ps1');
-  if (!actions.includes(CORE_MARKER)) {
-    throw new Error('host-actions.ps1 is missing the Host core marker.');
-  }
-  // A replacer function keeps PowerShell text such as $& or $' literal.
-  const inlined = actions.replace(CORE_MARKER, () => core);
-  return inlined.replaceAll(LEGACY_NAMESPACE, namespace).replace(RUNTIME_PLACEHOLDER, base64);
 }
 
 function countOccurrences(text, needle) {
@@ -181,15 +168,6 @@ function errorFrameStatement(tag, nonce, response) {
     + `[Console]::WriteLine("${PS_NEWLINE}"+'${tag}:'+${psString(nonce)}+':'+$encoded);[Console]::WriteLine('LSWB_END:'+${psString(nonce)})`;
 }
 
-function buildTerminalBindCommand(options) {
-  const { rootExpression, filename, sha256, functionName, limits, payload, nonce } = options;
-  const errorFrame = errorFrameStatement('LSWB_RESULT', nonce, "@{ok=$false;error=@{code='host_binding_failed';message=$_.Exception.Message}}");
-  const load = `& ([ScriptBlock]::Create([Text.Encoding]::UTF8.GetString($bytes))) -FunctionName ${psString(functionName)} -WorkspaceRoot $root`
-    + ` -DefaultTimeout ${limits.timeout} -OutputLimit ${limits.output} -TransferTtl ${limits.ttl} -ChunkBytes ${limits.chunkBytes};`;
-  const hello = `& ${psString(functionName)} -Payload ${psString(payload)} -Nonce ${psString(nonce)}`;
-  return `& {try{${verifiedBootstrapRead(rootExpression, filename, sha256)}${load}${hello}}catch{${errorFrame}}}`;
-}
-
 // The token lives only in the rendered bootstrap file, never on this line,
 // because the shared terminal scrollback is visible on the Host.
 function buildServerLaunchCommand(options) {
@@ -225,18 +203,6 @@ function decodeFramePayload(encoded) {
     throw new Error('Invalid Host frame encoding.');
   }
   return JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
-}
-
-function parseResultFrame(compact, nonce) {
-  const encoded = findTaggedPayload(compact, `LSWB_RESULT:${nonce}:`, `LSWB_END:${nonce}`);
-  if (encoded === null) {
-    return null;
-  }
-  const reply = decodeFramePayload(encoded);
-  if (!reply || typeof reply.ok !== 'boolean') {
-    throw new Error('Invalid Host response.');
-  }
-  return reply;
 }
 
 function parseBootFailure(compact, nonce) {
@@ -380,16 +346,13 @@ function awaitListening(options) {
 module.exports = {
   psString,
   newNonce,
-  renderBootstrap,
   renderServerBootstrap,
   prepareBootstrapFile,
   writeBootstrapFile,
   deleteBootstrapFile,
   rootExpressionFor,
-  buildTerminalBindCommand,
   buildServerLaunchCommand,
   compactTerminalText,
-  parseResultFrame,
   parseBootFailure,
   parseListeningFrame,
   awaitListening,

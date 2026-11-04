@@ -1,37 +1,135 @@
 'use strict';
-const {test}=require('node:test');const assert=require('node:assert/strict');const {createPermissions}=require('../permissions.cjs');const {createHostChannel}=require('../host-channel.cjs');
-function fixture(){
- const settings={'terminal.enabled':true},listeners=new Set(),sent=[],writes=[];let hold=false, readNonce, payloadBuffer='';
- const frame=(nonce,result)=>{const encoded=Buffer.from(JSON.stringify({ok:true,result})).toString('base64').replace(/(.{80})/gu,'$1\r\n');const start='LSWB_RESULT:'+nonce+':',end='LSWB_END:'+nonce;const value='\x1b]0;before\x1b\\\r\n'+start.slice(0,25)+'\r\n'+start.slice(25)+encoded+'\r\n'+end.slice(0,25)+'\r\n'+end.slice(25)+'\r\n\x1b]0;after\x1b\\';for(const callback of listeners)callback(value);};
- const pty={handleInput(){},onDidWrite(callback){listeners.add(callback);return{dispose(){listeners.delete(callback)}};}};
- const terminal={name:'powershell [Shared]',creationOptions:{pty},sendText(command,execute){sent.push(command);const match=/-Nonce '([a-f0-9]{32})'/u.exec(command);if(match){const nonce=match[1];if(command.includes('ScriptBlock'))setTimeout(()=>frame(nonce,{protocol:2,noEchoInput:true,chunkBytes:32768}),1);else if(command.includes('-ReadInput')){readNonce=nonce;payloadBuffer='';setTimeout(()=>{for(const callback of listeners)callback('\r\nLSWB_READY:'+nonce+'\r\n')},1);}else if(!hold)setTimeout(()=>frame(nonce,{complete:true,scope:'saved_host_files'}),1);}else if(readNonce&&!hold){payloadBuffer+=command;if(execute){const request=JSON.parse(Buffer.from(payloadBuffer,'base64'));assert.equal(request.requestNonce,readNonce);setTimeout(()=>frame(readNonce,{complete:true,bytes:request.base64?.length}),1);}}}};
- const root={toString:()=> 'vsls:/'};let epoch=1;
- const vscode={window:{terminals:[terminal]},workspace:{getConfiguration:()=>({get:key=>settings[key]}),fs:{async writeFile(uri,bytes){writes.push(bytes.length)},async delete(){}}},Uri:{joinPath:()=>({toString:()=> 'vsls:/bootstrap'})}};
- const permissions=createPermissions(vscode),host=createHostChannel(vscode,{epoch:()=>epoch},permissions);
- return{settings,vscode,permissions,host,root,terminal,sent,writes,listeners,setHold:()=>hold=true,bump:()=>epoch++};
+// Host channel: terminal selection for the one-time helper launch, access
+// gating, uncertainty without replay, and the legacy settings that 0.3.0
+// still reads. Requests themselves travel over the forwarded TCP port.
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const {
+  delay,
+  waitFor,
+  handshakeOf,
+  fakeHost,
+  fixture,
+  bindAndConnect,
+} = require('./host-fixtures.cjs');
+
+async function connectedFixture(t, options = {}) {
+  let fake;
+  const f = fixture(t, { ...options, bannerPort: () => fake.port });
+  fake = await fakeHost(t, () => f.tokenOf());
+  return { f, fake };
 }
-test('never selects an ordinary Guest terminal or writes a handshake when Host terminal access is disabled/missing',async t=>{
- const f=fixture();t.after(()=>f.host.dispose());f.settings['terminal.enabled']=false;
- await assert.rejects(f.host.bind(f.root),{code:'host_access_disabled'});assert.equal(f.writes.length,0);
- f.settings['terminal.enabled']=true;f.vscode.window.terminals=[{name:'pwsh',shellIntegration:{},creationOptions:{shellPath:'pwsh.exe'}}];
- await assert.rejects(f.host.bind(f.root),{code:'host_terminal_required'});assert.equal(f.writes.length,0);assert.equal(f.sent.length,0);
+
+test('never selects an ordinary Guest terminal or writes a handshake when Host access is disabled/missing', async t => {
+  const f = fixture(t, { settings: { 'host.enabled': false }, bannerPort: () => 1 });
+  await assert.rejects(f.host.bind(f.root), { code: 'host_access_disabled' });
+  assert.equal(f.scripts.length, 0);
+
+  f.settings['host.enabled'] = true;
+  f.vscode.window.terminals = [{ name: 'pwsh', shellIntegration: {}, creationOptions: { shellPath: 'pwsh.exe' } }];
+  await assert.rejects(f.host.bind(f.root), { code: 'host_terminal_required' });
+  assert.equal(f.scripts.length, 0);
+  assert.equal(f.sent.length, 0);
 });
-test('binds a shared terminal, sends large payload only after ready, and releases output listeners',async t=>{
- const f=fixture();t.after(()=>f.host.dispose());const bound=await f.host.bind(f.root);assert.equal(bound.bound,true);
- const reply=await f.host.request(f.root,'readBytes',{action:'readBytes',path:'file.bin',padding:'x'.repeat(3000)});
- assert.equal(reply.complete,true);assert.ok(f.sent[1].includes('-ReadInput'));assert.ok(f.sent.length>=3);assert.ok(f.sent.slice(2).every(x=>x.length<=4096));assert.equal(f.listeners.size,0);
+
+test('known read-only shared terminals are rejected without a handshake or command', async t => {
+  const f = fixture(t, { bannerPort: () => 1 });
+  f.terminal.creationOptions.pty.isReadonly = true;
+  await assert.rejects(f.host.bind(f.root), { code: 'host_terminal_required' });
+  assert.equal(f.sent.length, 0);
+  assert.equal(f.scripts.length, 0);
 });
-test('known read-only shared terminals are rejected without a handshake or command',async t=>{
- const f=fixture();t.after(()=>f.host.dispose());f.terminal.creationOptions.pty.isReadonly=true;
- await assert.rejects(f.host.bind(f.root),{code:'host_terminal_required'});assert.equal(f.sent.length,0);assert.equal(f.writes.length,0);
+
+test('host.terminalName selects exactly one shared terminal by name', async t => {
+  const f = fixture(t, { settings: { 'host.terminalName': 'other [Shared]' }, bannerPort: () => 1 });
+  await assert.rejects(f.host.bind(f.root), { code: 'host_terminal_required' });
+  f.settings['host.terminalName'] = 'powershell [Shared]';
+  assert.deepEqual(f.host.status(f.root).candidates, ['powershell [Shared]']);
 });
-test('revoking a permission detaches output capture and never replays a sent action',async t=>{
- const f=fixture();t.after(()=>f.host.dispose());await f.host.bind(f.root);f.setHold();
- const task=f.host.request(f.root,'search',{action:'search',query:'x'});
- await new Promise(resolve=>setTimeout(resolve,10));f.settings['permissions.search']=false;f.host.changed(false);
- await assert.rejects(task,{code:'host_access_revoked'});assert.equal(f.sent.length,2);assert.equal(f.listeners.size,0);
- f.settings['permissions.search']=true;await assert.rejects(f.host.request(f.root,'search',{action:'search',query:'x'}),{code:'host_channel_uncertain'});assert.equal(f.sent.length,2);
- // Restart invalidates the workspace binding; it must not acknowledge recovery.
- f.host.changed(true);f.bump();
- await assert.rejects(f.host.request(f.root,'search',{action:'search',query:'x'}),{code:'host_channel_uncertain'});assert.equal(f.sent.length,2);
+
+test('binding sends one launch line and releases the terminal output listener', async t => {
+  const { f } = await connectedFixture(t);
+  await bindAndConnect(f);
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.listeners.size, 0);
+  await f.host.request(f.root, 'search', { action: 'search', query: 'x' });
+  assert.equal(f.sent.length, 1);
+});
+
+test('an unknown mutation outcome makes the channel uncertain and nothing is replayed', async t => {
+  const { f, fake } = await connectedFixture(t);
+  await bindAndConnect(f);
+  fake.silentActions.add('writeBytes');
+  const action = { action: 'writeBytes', path: 'a.bin', base64: '', size: 0 };
+  await assert.rejects(f.host.request(f.root, 'writeBytes', action, { timeoutMs: 100 }), error => {
+    assert.equal(error.code, 'host_outcome_unknown');
+    assert.equal(error.details.mutationMayHaveOccurred, true);
+    return true;
+  });
+  const writes = () => fake.requests.filter(x => x.action === 'writeBytes').length;
+  assert.equal(writes(), 1);
+  assert.equal(f.host.status(f.root).uncertain, true);
+
+  await assert.rejects(f.host.request(f.root, 'search', { action: 'search', query: 'x' }), { code: 'host_channel_uncertain' });
+  // Invalidating the binding is not an acknowledgement of recovery.
+  f.identity.epochValue = 2;
+  f.host.changed(true);
+  await assert.rejects(f.host.request(f.root, 'search', { action: 'search', query: 'x' }), { code: 'host_channel_uncertain' });
+  assert.equal(writes(), 1);
+  assert.equal(f.sent.length, 1);
+});
+
+test('revoking Host access during the banner wait detaches the listener', async t => {
+  const f = fixture(t, { mode: 'silent', bannerPort: () => 1 });
+  const binding = f.host.bind(f.root);
+  await waitFor(() => f.sent.length === 1);
+  f.settings['host.enabled'] = false;
+  f.host.changed(false);
+  await assert.rejects(binding, { code: 'host_access_revoked' });
+  assert.equal(f.listeners.size, 0);
+});
+
+test('only the legacy terminal.enabled=true still binds and serves Host requests, with one notice', async t => {
+  const { f } = await connectedFixture(t, { settings: { 'host.enabled': undefined, 'terminal.enabled': true } });
+  delete f.settings['host.enabled'];
+  await bindAndConnect(f);
+  const reply = await f.host.request(f.root, 'search', { action: 'search', query: 'x' });
+  assert.equal(reply.action, 'search');
+  f.host.status(f.root);
+  const notices = f.logs.filter(line => line.includes('liveshareWorkspaceBridge.terminal.enabled is deprecated'));
+  assert.equal(notices.length, 1);
+  assert.match(notices[0], /host\.enabled/u);
+  assert.deepEqual(f.updates, []);
+});
+
+test('legacy terminal.* limits and workspace path apply while the new keys are unset', async t => {
+  const legacy = {
+    'terminal.hostWorkspacePath': 'C:\\Projects\\Shared',
+    'terminal.commandTimeoutMs': 5000,
+    'terminal.maxOutputCharacters': 2048,
+  };
+  const { f } = await connectedFixture(t, { settings: legacy });
+  await bindAndConnect(f);
+  assert.match(f.sent[0], /C:\\Projects\\Shared/u);
+  assert.match(f.scripts[0], /\[int\]\$DefaultTimeout = 5000/u);
+  assert.match(f.scripts[0], /\[int\]\$OutputLimit = 2048/u);
+});
+
+test('a stored host.transport sharedTerminal runs as portForward with one log line and no prompt', async t => {
+  const { f } = await connectedFixture(t, { settings: { 'host.transport': 'sharedTerminal' } });
+  await bindAndConnect(f);
+  await f.host.bind(f.root);
+  const notices = f.logs.filter(line => line.includes('host.transport'));
+  assert.equal(notices.length, 1);
+  assert.match(notices[0], /sharedTerminal.*portForward/u);
+  assert.ok(f.messages.every(x => !x.message.includes('host.transport')));
+  assert.deepEqual(f.updates, []);
+});
+
+test('any other stored host.transport value is ignored without a notice', async t => {
+  const { f } = await connectedFixture(t, { settings: { 'host.transport': 'carrierPigeon' } });
+  await bindAndConnect(f);
+  assert.equal(f.logs.filter(line => line.includes('host.transport')).length, 0);
+  assert.equal(handshakeOf(f).state, 'bound');
+  await delay(1);
 });
