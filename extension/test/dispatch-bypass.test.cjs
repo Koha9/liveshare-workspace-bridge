@@ -68,6 +68,19 @@ function fakeApi(release) {
   };
 }
 
+// Spreads the real module so a new ipc-access export cannot silently break
+// activation here; only the parts that touch settings, accounts or UI are stubbed.
+function fakeIpcAccess() {
+  const realIpcAccess = require('../ipc-access.cjs');
+  return {
+    ...realIpcAccess,
+    prepareAccess: async () => ({ mode: 'ownerOnly', selectedUserSids: [], migratedLegacy: false }),
+    listLocalUsers: async () => [],
+    configureAccess: async () => {},
+    noticeRemovedMode: async () => {},
+  };
+}
+
 function loadExtension(stubs) {
   const loader = Module._load;
   const modulePath = require.resolve('../extension.cjs');
@@ -117,12 +130,7 @@ test('a pending hostBind does not block hostStatus or info; other ops stay queue
     'node:os': { ...os, homedir: () => home },
     'node:child_process': { spawn: () => child },
     './workspace.cjs': { createWorkspaceApi: () => fakeApi(release) },
-    './ipc-access.cjs': {
-      ACCESS_KEYS: [],
-      prepareAccess: async () => ({ mode: 'ownerOnly', selectedUserSids: [], migratedLegacy: false }),
-      listLocalUsers: async () => [],
-      configureAccess: async () => {},
-    },
+    './ipc-access.cjs': fakeIpcAccess(),
     './mcp-launcher-install.cjs': { installLauncher() {}, launcherPath: () => '', renderMcpConfig: () => '' },
     './mcp-definition-provider.cjs': { registerMcpDefinitionProvider: () => ({ dispose() {} }) },
   });
